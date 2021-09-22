@@ -7,7 +7,7 @@
     <Authors>d4n3436</Authors>
     <NeutralLanguage>en</NeutralLanguage>
     <TargetFrameworks>net461;netstandard2.0;netstandard2.1</TargetFrameworks>
-    <Configurations>Debug;Release;DebugLabs;ReleaseLabs</Configurations>
+    <Configurations>Debug;Release</Configurations>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -25,27 +25,12 @@ This is a fork of Discord.InteractivityAddon that adds several features like mor
     </PackageReleaseNotes>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)'=='ReleaseLabs' Or '$(Configuration)'=='DebugLabs'">
-    <PackageId>$(MSBuildProjectName).Labs</PackageId>
-    <AssemblyName>$(MSBuildProjectName).Labs</AssemblyName>
-    <DefineConstants>$(DefineConstants)TRACE;DNETLABS</DefineConstants>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)'=='ReleaseLabs'">
-    <Optimize>True</Optimize>
-  </PropertyGroup>
-  
   <Choose>
     <When Condition="'$(Configuration)'=='Release' Or '$(Configuration)'=='Debug'">
       <ItemGroup>
-        <PackageReference Include="Discord.Net.WebSocket" Version="2.4.0" />
-      </ItemGroup>
-    </When>
-    <Otherwise>
-      <ItemGroup>
         <PackageReference Include="Discord.Net.Labs.WebSocket" Version="3.1.0" />
       </ItemGroup>
-    </Otherwise>
+    </When>
   </Choose>
   
   <ItemGroup>

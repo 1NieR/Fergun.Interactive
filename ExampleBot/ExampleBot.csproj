@@ -4,29 +4,15 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <Configurations>Debug;Release;DebugLabs;ReleaseLabs</Configurations>
+    <Configurations>Debug;Release</Configurations>
   </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)'=='ReleaseLabs' Or '$(Configuration)'=='DebugLabs'">
-    <DefineConstants>$(DefineConstants)TRACE;DNETLABS</DefineConstants>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)'=='ReleaseLabs'">
-    <Optimize>True</Optimize>
-  </PropertyGroup>
-
 
   <Choose>
     <When Condition="'$(Configuration)'=='Release' Or '$(Configuration)'=='Debug'">
       <ItemGroup>
-        <PackageReference Include="Discord.Net.Commands" Version="2.4.0" />
-      </ItemGroup>
-    </When>
-    <Otherwise>
-      <ItemGroup>
         <PackageReference Include="Discord.Net.Labs.Commands" Version="2.3.5" />
       </ItemGroup>
-    </Otherwise>
+    </When>
   </Choose>
 
   <ItemGroup>

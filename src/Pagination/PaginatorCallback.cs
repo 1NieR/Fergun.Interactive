@@ -106,7 +106,6 @@ namespace Fergun.Interactive.Pagination
             }
         }
 
-#if DNETLABS
         /// <inheritdoc/>
         public Task ExecuteAsync(SocketInteraction interaction)
         {
@@ -162,7 +161,6 @@ namespace Fergun.Interactive.Pagination
                 }).ConfigureAwait(false);
             }
         }
-#endif
 
         private void Dispose(bool disposing)
         {

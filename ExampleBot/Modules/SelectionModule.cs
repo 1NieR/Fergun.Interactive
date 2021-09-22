@@ -178,11 +178,7 @@ namespace ExampleBot.Modules
                 // The Emote property is used to get an emote representation of an item. This is required in selections using reactions as input.
                 .WithEmoteConverter(item => item.Emote)
                 // Since we have set both string and emote converters, we can use all 4 input types (when using Discord.Net.Labs).
-#if DNETLABS
                 .WithInputType(InputType.Reactions | InputType.Messages | InputType.Buttons | InputType.SelectMenus)
-#else
-                .WithInputType(InputType.Reactions | InputType.Messages)
-#endif
                 .Build();
 
             await Interactive.SendSelectionAsync(selection, Context.Channel, TimeSpan.FromMinutes(1));

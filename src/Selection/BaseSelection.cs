@@ -174,7 +174,6 @@ namespace Fergun.Interactive.Selection
             }
         }
 
-#if DNETLABS
         /// <inheritdoc/>
         public virtual MessageComponent BuildComponents(bool disableAll)
         {
@@ -225,7 +224,7 @@ namespace Fergun.Interactive.Selection
 
                     var button = new ButtonBuilder()
                         .WithCustomId(emote?.ToString() ?? label)
-                        .WithStyle(ButtonStyle.Primary)
+                        .WithStyle(ButtonStyle.Secondary)
                         .WithEmote(emote)
                         .WithDisabled(disableAll);
 
@@ -238,6 +237,5 @@ namespace Fergun.Interactive.Selection
 
             return builder.Build();
         }
-#endif
     }
 }

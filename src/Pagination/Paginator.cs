@@ -174,7 +174,6 @@ namespace Fergun.Interactive.Pagination
                 _ => new ValueTask<bool>(false)
             };
 
-#if DNETLABS
         /// <inheritdoc/>
         public virtual MessageComponent BuildComponents(bool disableAll)
         {
@@ -192,7 +191,7 @@ namespace Fergun.Interactive.Pagination
 
                 var button = new ButtonBuilder()
                     .WithCustomId(pair.Key.ToString())
-                    .WithStyle(pair.Value == PaginatorAction.Exit ? ButtonStyle.Danger : ButtonStyle.Primary)
+                    .WithStyle(pair.Value == PaginatorAction.Exit ? ButtonStyle.Secondary : ButtonStyle.Secondary)
                     .WithEmote(pair.Key)
                     .WithDisabled(isDisabled);
 
@@ -202,6 +201,5 @@ namespace Fergun.Interactive.Pagination
 
             return builder.Build();
         }
-#endif
     }
 }

@@ -38,7 +38,6 @@ namespace ExampleBot.Modules
             });
         }
 
-#if DNETLABS
         [Command("interaction", RunMode = RunMode.Async)]
         public async Task NextInteractionAsync()
         {
@@ -64,6 +63,5 @@ namespace ExampleBot.Modules
                 x.AllowedMentions = AllowedMentions.None;
             });
         }
-#endif
     }
 }

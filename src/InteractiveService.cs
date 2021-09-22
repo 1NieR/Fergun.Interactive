@@ -45,12 +45,8 @@ namespace Fergun.Interactive
             InteractiveGuards.NotNull(client, nameof(client));
             _client = client;
             _client.MessageReceived += MessageReceived;
-#if DNETLABS
             _client.ReactionAdded += ReactionAddedNew;
             _client.InteractionCreated += InteractionCreated;
-#else
-            DynamicSubscribeReactionAdded();
-#endif
         }
 
         /// <summary>
@@ -290,7 +286,6 @@ namespace Fergun.Interactive
             Func<SocketReaction, bool, Task>? action = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
             => NextEntityAsync(filter, action, timeout, cancellationToken);
 
-#if DNETLABS
         /// <summary>
         /// Gets the next interaction that passes the <paramref name="filter"/>.
         /// </summary>
@@ -310,7 +305,6 @@ namespace Fergun.Interactive
         public Task<InteractiveResult<SocketInteraction?>> NextInteractionAsync(Func<SocketInteraction, bool>? filter = null,
             Func<SocketInteraction, bool, Task>? action = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
             => NextEntityAsync(filter, action, timeout, cancellationToken);
-#endif
 
         /// <summary>
         /// Sends a paginator with pages which the user can change through via reactions or buttons.
@@ -358,7 +352,6 @@ namespace Fergun.Interactive
             return await WaitForPaginatorResultAsync(callback).ConfigureAwait(false);
         }
 
-#if DNETLABS
         /// <summary>
         /// Sends a paginator with pages which the user can change through via reactions or buttons.
         /// </summary>
@@ -415,7 +408,6 @@ namespace Fergun.Interactive
 
             return await WaitForPaginatorResultAsync(callback).ConfigureAwait(false);
         }
-#endif
 
         /// <summary>
         /// Sends a selection to the given message channel.
@@ -457,7 +449,6 @@ namespace Fergun.Interactive
             return await WaitForSelectionResultAsync(callback).ConfigureAwait(false);
         }
 
-#if DNETLABS
         /// <summary>
         /// Sends a selection to the given message channel.
         /// </summary>
@@ -508,7 +499,6 @@ namespace Fergun.Interactive
 
             return await WaitForSelectionResultAsync(callback).ConfigureAwait(false);
         }
-#endif
 
         private async Task<InteractiveResult<T?>> NextEntityAsync<T>(Func<T, bool>? filter = null, Func<T, bool, Task>? action = null,
             TimeSpan? timeout = null, CancellationToken cancellationToken = default)
@@ -616,14 +606,12 @@ namespace Fergun.Interactive
         {
             var page = await element.GetCurrentPageAsync().ConfigureAwait(false);
 
-#if DNETLABS
             MessageComponent? component = null;
             bool moreThanOnePage = element is not Paginator pag || pag.MaxPageIndex > 0;
             if ((element.InputType.HasFlag(InputType.Buttons) || element.InputType.HasFlag(InputType.SelectMenus)) && moreThanOnePage)
             {
                 component = element.BuildComponents(false);
             }
-#endif
 
             if (message != null)
             {
@@ -631,26 +619,18 @@ namespace Fergun.Interactive
                 {
                     x.Content = page.Text;
                     x.Embed = page.Embed;
-#if DNETLABS
                     x.Components = component;
-#endif
                 }).ConfigureAwait(false);
             }
             else
             {
-#if DNETLABS
                 message = await channel.SendMessageAsync(page.Text,
                     embed: page.Embed, component: component).ConfigureAwait(false);
-#else
-                message = await channel.SendMessageAsync(page.Text,
-                    embed: page.Embed).ConfigureAwait(false);
-#endif
             }
 
             return message;
         }
 
-#if DNETLABS
         private static async Task<IUserMessage> SendOrModifyMessageAsync<TOption>(IInteractiveElement<TOption> element, SocketInteraction interaction,
             InteractionResponseType responseType, bool ephemeral)
         {
@@ -692,7 +672,6 @@ namespace Fergun.Interactive
                 props.Components = component;
             }
         }
-#endif
 
         private async Task ApplyActionOnStopAsync<TOption>(IInteractiveElement<TOption> element, IInteractiveMessageResult result,
             SocketInteraction? lastInteraction, SocketMessageComponent? stopInteraction)
@@ -754,7 +733,6 @@ namespace Fergun.Interactive
                 };
             }
 
-#if DNETLABS
             MessageComponent? components = null;
             if (element.InputType.HasFlag(InputType.Buttons) || element.InputType.HasFlag(InputType.SelectMenus))
             {
@@ -769,9 +747,6 @@ namespace Fergun.Interactive
             }
 
             bool modifyMessage = page?.Text != null || page?.Embed != null || components != null;
-#else
-            bool modifyMessage = page?.Text != null || page?.Embed != null;
-#endif
 
             if (modifyMessage)
             {
@@ -800,9 +775,7 @@ namespace Fergun.Interactive
                         var pageToUse = page ?? currentPage;
                         x.Content = pageToUse?.Text;
                         x.Embed = pageToUse?.Embed;
-#if DNETLABS
                         x.Components = components ?? new Optional<MessageComponent>();
-#endif
                     }
                 }
                 catch (HttpException ex) when (ex.DiscordCode == 10008)
@@ -832,39 +805,9 @@ namespace Fergun.Interactive
             {
                 props.Content = page?.Text ?? new Optional<string>();
                 props.Embed = page?.Embed ?? new Optional<Embed>();
-#if DNETLABS
                 props.Components = components ?? new Optional<MessageComponent>();
-#endif
             }
         }
-
-#if !DNETLABS
-        private void DynamicSubscribeReactionAdded()
-        {
-            // The ReactionAdded event signature was changed in a pre-release version of Discord.Net 3.0
-            // This breaks compatibility between version 2.4.0 and 3.0
-            // Fortunately it's possible to keep backwards compatibility by dynamically subscribing to the ReactionAdded event
-
-            // Get event
-            var eventInfo = _client
-                .GetType()
-                .GetEvent(nameof(_client.ReactionAdded));
-
-            // Get the second argument of ReactionAdded, this is either "ISocketMessageChannel" (old) or "Cacheable<IMessageChannel, ulong>" (new)
-            var secondArg = eventInfo!
-                .EventHandlerType
-                .GetMethod("Invoke")!
-                .GetParameters()[1]
-                .ParameterType;
-
-            var del = secondArg == typeof(ISocketMessageChannel) ? (Delegate)ReactionAddedOld : ReactionAddedNew;
-
-            eventInfo.AddEventHandler(_client, del);
-        }
-
-        private Func<Cacheable<IUserMessage, ulong>, IMessageChannel, SocketReaction, Task> ReactionAddedOld
-            => (_, _, reaction) => ReactionAdded(reaction);
-#endif
 
         private Func<Cacheable<IUserMessage, ulong>, Cacheable<IMessageChannel, ulong>, SocketReaction, Task> ReactionAddedNew
             => (_, _, reaction) => ReactionAdded(reaction);
@@ -906,7 +849,6 @@ namespace Fergun.Interactive
             return Task.CompletedTask;
         }
 
-#if DNETLABS
         private Task InteractionCreated(SocketInteraction interaction)
         {
             if (interaction.User?.Id != _client.CurrentUser.Id
@@ -927,6 +869,5 @@ namespace Fergun.Interactive
 
             return Task.CompletedTask;
         }
-#endif
     }
 }

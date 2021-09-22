@@ -18,9 +18,7 @@ namespace ExampleBot
 
         private async Task StartAsync()
         {
-#if DNETLABS
             CanUseInteractions = true;
-#endif
 
             var services = ConfigureServices();
             var client = services.GetRequiredService<DiscordSocketClient>();
