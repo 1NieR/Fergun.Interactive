@@ -746,7 +746,7 @@ namespace Fergun.Interactive
                 }
             }
 
-            bool modifyMessage = page?.Text != null || page?.Embed != null || components != null;
+            bool modifyMessage = page?.Text is not null || page?.Embed is not null || components is not null;
 
             if (modifyMessage)
             {
