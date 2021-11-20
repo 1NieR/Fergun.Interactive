@@ -28,7 +28,7 @@ This is a fork of Discord.InteractivityAddon that adds several features like mor
   <Choose>
     <When Condition="'$(Configuration)'=='Release' Or '$(Configuration)'=='Debug'">
       <ItemGroup>
-        <PackageReference Include="Discord.Net.Labs.WebSocket" Version="3.2.0" />
+        <PackageReference Include="Discord.Net.Labs.WebSocket" Version="3.3.0" />
       </ItemGroup>
     </When>
   </Choose>
