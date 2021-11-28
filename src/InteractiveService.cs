@@ -45,7 +45,7 @@ namespace Fergun.Interactive
             InteractiveGuards.NotNull(client, nameof(client));
             _client = client;
             _client.MessageReceived += MessageReceived;
-            _client.ReactionAdded += ReactionAddedNew;
+            _client.ReactionAdded += ReactionAdded;
             _client.InteractionCreated += InteractionCreated;
         }
 
@@ -763,7 +763,7 @@ namespace Fergun.Interactive
         private static async Task ApplyActionOnStopAsync<TOption>(IInteractiveElement<TOption> element, IInteractiveMessageResult result,
             SocketInteraction? lastInteraction, SocketMessageComponent? stopInteraction)
         {
-            bool ephemeral = ((int)result.Message.Flags.GetValueOrDefault() & 64) == 64;
+            bool ephemeral = result.Message.Flags.GetValueOrDefault().HasFlag(MessageFlags.Ephemeral);
 
             var action = result.Status switch
             {
@@ -882,9 +882,6 @@ namespace Fergun.Interactive
             }
         }
 
-        private Func<Cacheable<IUserMessage, ulong>, Cacheable<IMessageChannel, ulong>, SocketReaction, Task> ReactionAddedNew
-            => (_, _, reaction) => ReactionAdded(reaction);
-
         private Task MessageReceived(SocketMessage message)
         {
             if (message.Author.Id == _client.CurrentUser.Id)
@@ -903,7 +900,7 @@ namespace Fergun.Interactive
             return Task.CompletedTask;
         }
 
-        private Task ReactionAdded(SocketReaction reaction)
+        private Task ReactionAdded(Cacheable<IUserMessage, ulong> cachedMessage, Cacheable<IMessageChannel, ulong> cachedChannel, SocketReaction reaction)
         {
             if (reaction.UserId != _client.CurrentUser.Id
                 && _callbacks.TryGetValue(reaction.MessageId, out var callback))

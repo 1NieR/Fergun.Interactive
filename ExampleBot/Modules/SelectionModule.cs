@@ -177,7 +177,7 @@ namespace ExampleBot.Modules
                 .WithStringConverter(item => item.Name)
                 // The Emote property is used to get an emote representation of an item. This is required in selections using reactions as input.
                 .WithEmoteConverter(item => item.Emote)
-                // Since we have set both string and emote converters, we can use all 4 input types (when using Discord.Net.Labs).
+                // Since we have set both string and emote converters, we can use all 4 input types.
                 .WithInputType(InputType.Reactions | InputType.Messages | InputType.Buttons | InputType.SelectMenus)
                 .Build();
 
@@ -216,8 +216,8 @@ namespace ExampleBot.Modules
 
             var color = GetRandomColor();
 
-            // If we can use interactions, prefer disabling the input (buttons, select menus) instead of removing them from the message.
-            var actionOnStop = Program.CanUseInteractions ? ActionOnStop.DisableInput : ActionOnStop.DeleteInput;
+            // Prefer disabling the input (buttons, select menus) instead of removing them from the message.
+            var actionOnStop = ActionOnStop.DisableInput;
 
             InteractiveMessageResult<KeyValuePair<IEmote, int>> result = null;
             IUserMessage message = null;
