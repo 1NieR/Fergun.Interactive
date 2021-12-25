@@ -712,7 +712,7 @@ namespace Fergun.Interactive
             else
             {
                 message = await channel.SendMessageAsync(page.Text,
-                    embed: page.Embed, component: component).ConfigureAwait(false);
+                    embed: page.Embed, components: component).ConfigureAwait(false);
             }
 
             return message;
@@ -733,11 +733,11 @@ namespace Fergun.Interactive
             switch (responseType)
             {
                 case InteractionResponseType.ChannelMessageWithSource:
-                    await interaction.RespondAsync(page.Text, embed: page.Embed, ephemeral: ephemeral, component: component).ConfigureAwait(false);
+                    await interaction.RespondAsync(page.Text, embed: page.Embed, ephemeral: ephemeral, components: component).ConfigureAwait(false);
                     return await interaction.GetOriginalResponseAsync().ConfigureAwait(false);
 
                 case InteractionResponseType.DeferredChannelMessageWithSource:
-                    return await interaction.FollowupAsync(page.Text, embed: page.Embed, ephemeral: ephemeral, component: component).ConfigureAwait(false);
+                    return await interaction.FollowupAsync(page.Text, embed: page.Embed, ephemeral: ephemeral, components: component).ConfigureAwait(false);
 
                 case InteractionResponseType.DeferredUpdateMessage:
                     InteractiveGuards.ValidResponseType(responseType, interaction, nameof(responseType));
