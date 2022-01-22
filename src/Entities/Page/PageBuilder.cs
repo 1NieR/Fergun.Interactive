@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Discord;
 using Fergun.Interactive.Pagination;
 
@@ -8,7 +9,7 @@ namespace Fergun.Interactive
     /// <summary>
     /// Represents a <see cref="Page"/> builder.
     /// </summary>
-    public class PageBuilder
+    public class PageBuilder : IPageBuilder<Page>, IPageBuilder
     {
         private readonly EmbedBuilder _builder;
 
@@ -397,7 +398,7 @@ namespace Fergun.Interactive
             return this;
         }
 
-        internal PageBuilder WithPaginatorFooter(PaginatorFooter footer, int page, int totalPages, IList<IUser>? users)
+        internal PageBuilder WithPaginatorFooter(PaginatorFooter footer, int page, int totalPages, ICollection<IUser>? users)
         {
             if (footer == PaginatorFooter.None)
             {
@@ -413,7 +414,7 @@ namespace Fergun.Interactive
                 }
                 else if (users.Count == 1)
                 {
-                    var user = users[0];
+                    var user = users.First();
 
                     Footer.IconUrl = user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl();
                     Footer.Text += $"Interactor: {user}\n";
@@ -425,10 +426,13 @@ namespace Fergun.Interactive
             }
             if (footer.HasFlag(PaginatorFooter.PageNumber))
             {
-                Footer.Text += $"Page {page + 1}/{totalPages + 1}";
+                Footer.Text += $"Страница - {page + 1} из {totalPages + 1}";
             }
 
             return this;
         }
+
+        /// <inheritdoc/>
+        IPage IPageBuilder<IPage>.Build() => Build();
     }
 }

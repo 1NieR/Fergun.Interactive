@@ -1,8 +1,5 @@
 using System;
-using System.Collections.ObjectModel;
-using System.Linq;
 using System.Threading.Tasks;
-using Discord;
 
 namespace Fergun.Interactive.Pagination
 {
@@ -14,7 +11,7 @@ namespace Fergun.Interactive.Pagination
         /// <summary>
         /// Gets or sets the method used to load the pages of the paginator lazily.
         /// </summary>
-        public Func<int, Task<PageBuilder>> PageFactory { get; set; } = null!;
+        public Func<int, Task<IPageBuilder>> PageFactory { get; set; } = null!;
 
         /// <summary>
         /// Gets or sets the maximum page index of the paginator.
@@ -34,35 +31,14 @@ namespace Fergun.Interactive.Pagination
         }
 
         /// <inheritdoc/>
-        public override LazyPaginator Build(int startPageIndex = 0)
+        public override LazyPaginator Build()
         {
             if (Options.Count == 0)
             {
                 WithDefaultEmotes();
             }
 
-            return new LazyPaginator(
-                Users.ToArray(),
-                new ReadOnlyDictionary<IEmote, PaginatorAction>(Options), // TODO: Find a way to create an ImmutableDictionary without getting the contents reordered.
-                CanceledPage?.Build(),
-                TimeoutPage?.Build(),
-                Deletion,
-                InputType,
-                ActionOnCancellation,
-                ActionOnTimeout,
-                PageFactory != null! ? AddPaginatorFooterAsync : null!,
-                startPageIndex,
-                MaxPageIndex,
-                CacheLoadedPages);
-
-            async Task<Page> AddPaginatorFooterAsync(int page)
-            {
-                var builder = await PageFactory(page).ConfigureAwait(false);
-
-                return builder
-                    .WithPaginatorFooter(Footer, page, MaxPageIndex, Users)
-                    .Build();
-            }
+            return new LazyPaginator(this);
         }
 
         /// <summary>
@@ -70,9 +46,22 @@ namespace Fergun.Interactive.Pagination
         /// </summary>
         /// <param name="pageFactory">The page factory.</param>
         /// <returns>This builder.</returns>
-        public LazyPaginatorBuilder WithPageFactory(Func<int, Task<PageBuilder>> pageFactory)
+        public LazyPaginatorBuilder WithPageFactory(Func<int, IPageBuilder> pageFactory)
         {
-            PageFactory = pageFactory ?? throw new ArgumentNullException(nameof(pageFactory));
+            InteractiveGuards.NotNull(pageFactory, nameof(pageFactory));
+            return WithPageFactory(index => Task.FromResult(pageFactory(index)));
+        }
+
+        /// <summary>
+        /// Sets the <see cref="PageFactory"/> of the paginator.
+        /// </summary>
+        /// <param name="pageFactory">The page factory.</param>
+        /// <returns>This builder.</returns>
+        public LazyPaginatorBuilder WithPageFactory<TPageBuilder>(Func<int, Task<TPageBuilder>> pageFactory)
+            where TPageBuilder : IPageBuilder
+        {
+            InteractiveGuards.NotNull(pageFactory, nameof(pageFactory));
+            PageFactory = pageFactory as Func<int, Task<IPageBuilder>> ?? (async index => await pageFactory(index).ConfigureAwait(false));
             return this;
         }
 

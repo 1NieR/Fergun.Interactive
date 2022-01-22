@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace Fergun.Interactive
 {
     /// <summary>
-    /// Represents a generic result from an interactive action.
+    /// Represents a generic result of an interactive action.
     /// </summary>
     /// <typeparam name="T">The type of the value of this result.</typeparam>
     public class InteractiveResult<T> : InteractiveResult
@@ -29,9 +29,9 @@ namespace Fergun.Interactive
     }
 
     /// <summary>
-    /// Represents a non-generic result from an interactive action.
+    /// Represents a non-generic result of an interactive action.
     /// </summary>
-    public class InteractiveResult : IInteractiveResult
+    public class InteractiveResult : IInteractiveResult<InteractiveStatus>, IElapsed
     {
         internal InteractiveResult(TimeSpan elapsed, InteractiveStatus status = InteractiveStatus.Success)
         {

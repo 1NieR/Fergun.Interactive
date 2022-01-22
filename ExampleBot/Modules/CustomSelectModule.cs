@@ -108,26 +108,19 @@ public class MultiSelectionBuilder<T> : BaseSelectionBuilder<MultiSelection<T>, 
 {
     public override InputType InputType => InputType.SelectMenus;
 
-    public override MultiSelection<T> Build() => new(EmoteConverter, StringConverter,
-        EqualityComparer, AllowCancel, SelectionPage?.Build(), Users?.ToArray(), Options?.ToArray(),
-        CanceledPage?.Build(), TimeoutPage?.Build(), SuccessPage?.Build(), Deletion, InputType,
-        ActionOnCancellation, ActionOnTimeout, ActionOnSuccess);
+    public override MultiSelection<T> Build() => new(this);
 }
 
 public class MultiSelection<T> : BaseSelection<MultiSelectionOption<T>>
 {
-    public MultiSelection(Func<MultiSelectionOption<T>, IEmote> emoteConverter, Func<MultiSelectionOption<T>, string> stringConverter,
-        IEqualityComparer<MultiSelectionOption<T>> equalityComparer, bool allowCancel, Page selectionPage, IReadOnlyCollection<IUser> users,
-        IReadOnlyCollection<MultiSelectionOption<T>> options, Page canceledPage, Page timeoutPage, Page successPage, DeletionOptions deletion,
-        InputType inputType, ActionOnStop actionOnCancellation, ActionOnStop actionOnTimeout, ActionOnStop actionOnSuccess)
-        : base(emoteConverter, stringConverter, equalityComparer, allowCancel, selectionPage, users, options, canceledPage,
-            timeoutPage, successPage, deletion, inputType, actionOnCancellation, actionOnTimeout, actionOnSuccess)
+    public MultiSelection(MultiSelectionBuilder<T> builder)
+        : base(builder)
     {
     }
 
-    public override MessageComponent BuildComponents(bool disableAll)
+    public override ComponentBuilder GetOrAddComponents(bool disableAll, ComponentBuilder builder = null)
     {
-        var builder = new ComponentBuilder();
+        builder ??= new ComponentBuilder();
         var selectMenus = new Dictionary<int, SelectMenuBuilder>();
 
         foreach (var option in Options)
@@ -162,7 +155,7 @@ public class MultiSelection<T> : BaseSelection<MultiSelectionOption<T>>
             builder.WithSelectMenu(selectMenu, row);
         }
 
-        return builder.Build();
+        return builder;
     }
 }
 

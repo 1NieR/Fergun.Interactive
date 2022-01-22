@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Discord;
 using Discord.Net;
 using Discord.WebSocket;
+using Fergun.Interactive.Extensions;
 using Fergun.Interactive.Pagination;
 using Fergun.Interactive.Selection;
 
@@ -531,13 +532,16 @@ namespace Fergun.Interactive
             InteractiveGuards.DeleteAndDisableInputNotSet(paginator.ActionOnCancellation, nameof(paginator.ActionOnCancellation));
             InteractiveGuards.SupportedInputType(paginator, ephemeral);
             InteractiveGuards.ValidResponseType(responseType, nameof(responseType));
+            InteractiveGuards.NotCanceled(cancellationToken, nameof(cancellationToken));
 
             var message = await SendOrModifyMessageAsync(paginator, interaction, responseType, ephemeral).ConfigureAwait(false);
             messageAction?.Invoke(message);
 
             if (paginator.MaxPageIndex == 0)
             {
-                return new InteractiveMessageResult(TimeSpan.Zero, message);
+                return new InteractiveMessageResultBuilder()
+                    .WithMessage(message)
+                    .Build();
             }
 
             var timeoutTaskSource = new TimeoutTaskCompletionSource<InteractiveStatus>(timeout ?? _config.DefaultTimeout,
@@ -557,13 +561,16 @@ namespace Fergun.Interactive
             InteractiveGuards.DeleteAndDisableInputNotSet(paginator.ActionOnTimeout, nameof(paginator.ActionOnTimeout));
             InteractiveGuards.DeleteAndDisableInputNotSet(paginator.ActionOnCancellation, nameof(paginator.ActionOnCancellation));
             InteractiveGuards.SupportedInputType(paginator, false);
+            InteractiveGuards.NotCanceled(cancellationToken, nameof(cancellationToken));
 
             message = await SendOrModifyMessageAsync(paginator, message, channel).ConfigureAwait(false);
             messageAction?.Invoke(message);
 
             if (paginator.MaxPageIndex == 0)
             {
-                return new InteractiveMessageResult(TimeSpan.Zero, message);
+                return new InteractiveMessageResultBuilder()
+                    .WithMessage(message)
+                    .Build();
             }
 
             var timeoutTaskSource = new TimeoutTaskCompletionSource<InteractiveStatus>(timeout ?? _config.DefaultTimeout,
@@ -654,6 +661,7 @@ namespace Fergun.Interactive
             InteractiveGuards.DeleteAndDisableInputNotSet(selection.ActionOnSuccess, nameof(selection.ActionOnSuccess));
             InteractiveGuards.SupportedInputType(selection, ephemeral);
             InteractiveGuards.ValidResponseType(responseType, nameof(responseType));
+            InteractiveGuards.NotCanceled(cancellationToken, nameof(cancellationToken));
 
             var message = await SendOrModifyMessageAsync(selection, interaction, responseType, ephemeral).ConfigureAwait(false);
             messageAction?.Invoke(message);
@@ -676,6 +684,7 @@ namespace Fergun.Interactive
             InteractiveGuards.DeleteAndDisableInputNotSet(selection.ActionOnCancellation, nameof(selection.ActionOnCancellation));
             InteractiveGuards.DeleteAndDisableInputNotSet(selection.ActionOnSuccess, nameof(selection.ActionOnSuccess));
             InteractiveGuards.SupportedInputType(selection, false);
+            InteractiveGuards.NotCanceled(cancellationToken, nameof(cancellationToken));
 
             message = await SendOrModifyMessageAsync(selection, message, channel).ConfigureAwait(false);
             messageAction?.Invoke(message);
@@ -691,6 +700,8 @@ namespace Fergun.Interactive
         private async Task<InteractiveResult<T?>> NextEntityAsync<T>(Func<T, bool>? filter = null, Func<T, bool, Task>? action = null,
             TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         {
+            InteractiveGuards.NotCanceled(cancellationToken, nameof(cancellationToken));
+
             filter ??= _ => true;
             action ??= (_, _) => Task.CompletedTask;
 
@@ -724,7 +735,7 @@ namespace Fergun.Interactive
             cts?.Cancel();
             cts?.Dispose();
 
-            var result = new InteractiveMessageResult(callback.GetElapsedTime(status), callback.Message, status);
+            var result = InteractiveMessageResultBuilder.FromCallback(callback, status).Build();
 
             if (_callbacks.TryRemove(callback.Message.Id, out _))
             {
@@ -764,7 +775,7 @@ namespace Fergun.Interactive
             cts?.Cancel();
             cts?.Dispose();
 
-            var result = new InteractiveMessageResult<TOption?>(selected, callback.GetElapsedTime(status), callback.Message, status);
+            var result = InteractiveMessageResultBuilder<TOption?>.FromCallback(callback, selected, status).Build();
 
             if (_callbacks.TryRemove(callback.Message.Id, out _))
             {
@@ -785,7 +796,7 @@ namespace Fergun.Interactive
             bool moreThanOnePage = element is not Paginator pag || pag.MaxPageIndex > 0;
             if ((element.InputType.HasFlag(InputType.Buttons) || element.InputType.HasFlag(InputType.SelectMenus)) && moreThanOnePage)
             {
-                component = element.BuildComponents(false);
+                component = element.GetOrAddComponents(false).Build();
             }
 
             if (message is not null)
@@ -793,7 +804,7 @@ namespace Fergun.Interactive
                 await message.ModifyAsync(x =>
                 {
                     x.Content = page.Text;
-                    x.Embed = page.Embed;
+                    x.Embeds = page.GetEmbedArray();
                     x.Components = component;
                 }).ConfigureAwait(false);
             }
@@ -801,7 +812,7 @@ namespace Fergun.Interactive
             {
                 InteractiveGuards.NotNull(channel, nameof(channel));
                 message = await channel!.SendMessageAsync(page.Text,
-                    embed: page.Embed, components: component).ConfigureAwait(false);
+                    embeds: page.GetEmbedArray(), components: component).ConfigureAwait(false);
             }
 
             return message;
@@ -816,17 +827,19 @@ namespace Fergun.Interactive
             bool moreThanOnePage = element is not Paginator pag || pag.MaxPageIndex > 0;
             if ((element.InputType.HasFlag(InputType.Buttons) || element.InputType.HasFlag(InputType.SelectMenus)) && moreThanOnePage)
             {
-                component = element.BuildComponents(false);
+                component = element.GetOrAddComponents(false).Build();
             }
+
+            var embeds = page.GetEmbedArray();
 
             switch (responseType)
             {
                 case InteractionResponseType.ChannelMessageWithSource:
-                    await interaction.RespondAsync(page.Text, embed: page.Embed, ephemeral: ephemeral, components: component).ConfigureAwait(false);
+                    await interaction.RespondAsync(page.Text, embeds, ephemeral: ephemeral, components: component).ConfigureAwait(false);
                     return await interaction.GetOriginalResponseAsync().ConfigureAwait(false);
 
                 case InteractionResponseType.DeferredChannelMessageWithSource:
-                    return await interaction.FollowupAsync(page.Text, embed: page.Embed, ephemeral: ephemeral, components: component).ConfigureAwait(false);
+                    return await interaction.FollowupAsync(page.Text, embeds, ephemeral: ephemeral, components: component).ConfigureAwait(false);
 
                 case InteractionResponseType.DeferredUpdateMessage:
                     InteractiveGuards.ValidResponseType(responseType, interaction, nameof(responseType));
@@ -844,7 +857,7 @@ namespace Fergun.Interactive
             void UpdateMessage(MessageProperties props)
             {
                 props.Content = page.Text;
-                props.Embed = page.Embed;
+                props.Embeds = embeds;
                 props.Components = component;
             }
         }
@@ -896,7 +909,7 @@ namespace Fergun.Interactive
                 return;
             }
 
-            Page? page = null;
+            IPage? page = null;
             if (action.HasFlag(ActionOnStop.ModifyMessage))
             {
                 page = result.Status switch
@@ -913,7 +926,7 @@ namespace Fergun.Interactive
             {
                 if (action.HasFlag(ActionOnStop.DisableInput))
                 {
-                    components = element.BuildComponents(true);
+                    components = element.GetOrAddComponents(true).Build();
                 }
                 else if (action.HasFlag(ActionOnStop.DeleteInput))
                 {
@@ -921,7 +934,7 @@ namespace Fergun.Interactive
                 }
             }
 
-            bool modifyMessage = page?.Text is not null || page?.Embed is not null || components is not null;
+            bool modifyMessage = page?.Text is not null || page?.Embeds.Count > 0 || components is not null;
 
             if (modifyMessage)
             {
@@ -954,8 +967,7 @@ namespace Fergun.Interactive
             {
                 Debug.Assert(!ephemeral, "Ephemeral messages cannot have InputType.Reactions");
 
-                bool manageMessages = result.Message.Channel is SocketGuildChannel guildChannel
-                                      && guildChannel.Guild.CurrentUser.GetPermissions(guildChannel).ManageMessages;
+                bool manageMessages = await result.Message.Channel.CurrentUserHasManageMessagesAsync();
 
                 if (manageMessages)
                 {
@@ -966,7 +978,7 @@ namespace Fergun.Interactive
             void UpdateMessage(MessageProperties props)
             {
                 props.Content = page?.Text ?? new Optional<string>();
-                props.Embed = page?.Embed ?? new Optional<Embed>();
+                props.Embeds = page?.GetEmbedArray() ?? new Optional<Embed[]>();
                 props.Components = components ?? new Optional<MessageComponent>();
             }
         }

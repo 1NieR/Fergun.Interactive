@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
-using Discord;
 
 namespace Fergun.Interactive.Pagination
 {
@@ -11,12 +10,12 @@ namespace Fergun.Interactive.Pagination
     /// </summary>
     public sealed class LazyPaginator : Paginator
     {
-        private readonly Dictionary<int, Page>? _cachedPages;
+        private readonly Dictionary<int, IPage>? _cachedPages;
 
         /// <summary>
         /// Gets the function used to load the pages of this paginator lazily.
         /// </summary>
-        public Func<int, Task<Page>> PageFactory { get; }
+        public Func<int, Task<IPage>> PageFactory { get; }
 
         /// <inheritdoc/>
         public override int MaxPageIndex { get; }
@@ -27,24 +26,31 @@ namespace Fergun.Interactive.Pagination
         [MemberNotNullWhen(true, nameof(_cachedPages))]
         public bool CacheLoadedPages { get; }
 
-        internal LazyPaginator(IReadOnlyCollection<IUser> users, IReadOnlyDictionary<IEmote, PaginatorAction> emotes,
-            Page? canceledPage, Page? timeoutPage, DeletionOptions deletion, InputType inputType,
-            ActionOnStop actionOnCancellation, ActionOnStop actionOnTimeout, Func<int, Task<Page>> pageFactory,
-            int startPage, int maxPageIndex, bool cacheLoadedPages)
-            : base(users, emotes, canceledPage, timeoutPage, deletion, inputType, actionOnCancellation, actionOnTimeout, startPage)
+        internal LazyPaginator(LazyPaginatorBuilder builder)
+            : base(builder)
         {
-            PageFactory = pageFactory ?? throw new ArgumentNullException(nameof(pageFactory));
-            MaxPageIndex = maxPageIndex;
-            CacheLoadedPages = cacheLoadedPages;
+            InteractiveGuards.SupportedPaginatorInputType(builder.InputType);
+            InteractiveGuards.NotNull(builder.PageFactory, nameof(builder.PageFactory));
+
+            PageFactory = AddPaginatorFooterAsync;
+            MaxPageIndex = builder.MaxPageIndex;
+            CacheLoadedPages = builder.CacheLoadedPages;
 
             if (CacheLoadedPages)
             {
-                _cachedPages = new Dictionary<int, Page>();
+                _cachedPages = new Dictionary<int, IPage>();
+            }
+
+            async Task<IPage> AddPaginatorFooterAsync(int page)
+            {
+                var pageBuilder = await builder.PageFactory(page).ConfigureAwait(false);
+                (pageBuilder as PageBuilder)?.WithPaginatorFooter(builder.Footer, page, MaxPageIndex, builder.Users);
+                return pageBuilder.Build();
             }
         }
 
         /// <inheritdoc/>
-        public override async Task<Page> GetOrLoadPageAsync(int pageIndex)
+        public override async Task<IPage> GetOrLoadPageAsync(int pageIndex)
         {
             if (CacheLoadedPages && _cachedPages.TryGetValue(pageIndex, out var page))
             {

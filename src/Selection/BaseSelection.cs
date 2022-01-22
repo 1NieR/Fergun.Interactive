@@ -5,6 +5,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Discord;
+using Discord.WebSocket;
+using Fergun.Interactive.Extensions;
 
 namespace Fergun.Interactive.Selection
 {
@@ -47,9 +49,9 @@ namespace Fergun.Interactive.Selection
         public TOption? CancelOption { get; }
 
         /// <summary>
-        /// Gets the <see cref="Page"/> which is sent into the channel.
+        /// Gets the <see cref="IPage"/> which is sent into the channel.
         /// </summary>
-        public Page SelectionPage { get; }
+        public IPage SelectionPage { get; }
 
         /// <inheritdoc/>
         public IReadOnlyCollection<IUser> Users { get; }
@@ -58,16 +60,16 @@ namespace Fergun.Interactive.Selection
         public IReadOnlyCollection<TOption> Options { get; }
 
         /// <inheritdoc/>
-        public Page? CanceledPage { get; }
+        public IPage? CanceledPage { get; }
 
         /// <inheritdoc/>
-        public Page? TimeoutPage { get; }
+        public IPage? TimeoutPage { get; }
 
         /// <summary>
-        /// Gets the <see cref="Page"/> which this selection gets modified to after a valid input is received
+        /// Gets the <see cref="IPage"/> which this selection gets modified to after a valid input is received
         /// (except if <see cref="CancelOption"/> is received).
         /// </summary>
-        public Page? SuccessPage { get; }
+        public IPage? SuccessPage { get; }
 
         /// <inheritdoc/>
         public DeletionOptions Deletion { get; }
@@ -87,60 +89,40 @@ namespace Fergun.Interactive.Selection
         public ActionOnStop ActionOnSuccess { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="BaseSelection{TOption}"/> class.
+        /// Initializes a new instance of the <see cref="BaseSelection{TOption}"/> class using the specified builder properties.
         /// </summary>
-        protected BaseSelection(Func<TOption, IEmote>? emoteConverter, Func<TOption, string>? stringConverter, IEqualityComparer<TOption> equalityComparer,
-            bool allowCancel, Page selectionPage, IReadOnlyCollection<IUser> users, IReadOnlyCollection<TOption> options, Page? canceledPage,
-            Page? timeoutPage, Page? successPage, DeletionOptions deletion, InputType inputType, ActionOnStop actionOnCancellation,
-            ActionOnStop actionOnTimeout, ActionOnStop actionOnSuccess)
+        /// <param name="builder">The builder to copy the properties from.</param>
+        protected BaseSelection(BaseSelectionBuilderProperties<TOption> builder)
         {
-            if (inputType == 0)
+            InteractiveGuards.SupportedInputType(builder.InputType, false);
+            InteractiveGuards.RequiredEmoteConverter(builder.InputType, builder.EmoteConverter);
+            InteractiveGuards.NotNull(builder.EqualityComparer, nameof(builder.EqualityComparer));
+            InteractiveGuards.NotNull(builder.SelectionPage, nameof(builder.SelectionPage));
+            InteractiveGuards.NotNull(builder.Options, nameof(builder.Options));
+            InteractiveGuards.NotNull(builder.Users, nameof(builder.Users));
+            InteractiveGuards.NotEmpty(builder.Options, nameof(builder.Options));
+
+            StringConverter = builder.StringConverter;
+            EmoteConverter = builder.EmoteConverter;
+            EqualityComparer = builder.EqualityComparer;
+            SelectionPage = builder.SelectionPage.Build();
+            AllowCancel = builder.AllowCancel && builder.Options.Count > 1;
+            CancelOption = AllowCancel ? builder.Options.Last() : default;
+            Users = builder.Users.ToArray();
+            Options = builder.Options.ToArray();
+            CanceledPage = builder.CanceledPage?.Build();
+            TimeoutPage = builder.TimeoutPage?.Build();
+            SuccessPage = builder.SuccessPage?.Build();
+            Deletion = builder.Deletion;
+            InputType = builder.InputType;
+            ActionOnCancellation = builder.ActionOnCancellation;
+            ActionOnTimeout = builder.ActionOnTimeout;
+            ActionOnSuccess = builder.ActionOnSuccess;
+
+            if (StringConverter is null && (!InputType.HasFlag(InputType.Buttons) || EmoteConverter is null))
             {
-                throw new ArgumentException("At least one input type must be set.", nameof(inputType));
+                StringConverter = x => x?.ToString()!;
             }
-
-            if (inputType.HasFlag(InputType.Reactions) && emoteConverter is null)
-            {
-                throw new ArgumentNullException(nameof(emoteConverter), $"{nameof(emoteConverter)} is required when {nameof(inputType)} has InputType.Reactions.");
-            }
-
-            if (stringConverter is null && (!inputType.HasFlag(InputType.Buttons) || emoteConverter is null))
-            {
-                stringConverter = x => x?.ToString()!;
-            }
-
-            EmoteConverter = emoteConverter;
-            StringConverter = stringConverter;
-            EqualityComparer = equalityComparer ?? throw new ArgumentNullException(nameof(equalityComparer));
-            SelectionPage = selectionPage ?? throw new ArgumentNullException(nameof(selectionPage));
-
-            if (options is null)
-            {
-                throw new ArgumentNullException(nameof(options));
-            }
-
-            if (options.Count == 0)
-            {
-                throw new ArgumentException($"{nameof(options)} must contain at least one element.", nameof(options));
-            }
-
-            if (options.Distinct(EqualityComparer).Count() != options.Count)
-            {
-                throw new ArgumentException($"{nameof(options)} must not contain duplicate elements.", nameof(options));
-            }
-
-            AllowCancel = allowCancel && options.Count > 1;
-            CancelOption = AllowCancel ? options.Last() : default;
-            Users = users ?? throw new ArgumentNullException(nameof(users));
-            Options = options;
-            CanceledPage = canceledPage;
-            TimeoutPage = timeoutPage;
-            SuccessPage = successPage;
-            Deletion = deletion;
-            InputType = inputType;
-            ActionOnCancellation = actionOnCancellation;
-            ActionOnTimeout = actionOnTimeout;
-            ActionOnSuccess = actionOnSuccess;
         }
 
         /// <summary>
@@ -175,14 +157,14 @@ namespace Fergun.Interactive.Selection
         }
 
         /// <inheritdoc/>
-        public virtual MessageComponent BuildComponents(bool disableAll)
+        public virtual ComponentBuilder GetOrAddComponents(bool disableAll, ComponentBuilder? builder = null)
         {
             if (!(InputType.HasFlag(InputType.Buttons) || InputType.HasFlag(InputType.SelectMenus)))
             {
                 throw new InvalidOperationException($"{nameof(InputType)} must have either {InputType.Buttons} or {InputType.SelectMenus}.");
             }
 
-            var builder = new ComponentBuilder();
+            builder ??= new ComponentBuilder();
             if (InputType.HasFlag(InputType.SelectMenus))
             {
                 var options = new List<SelectMenuOptionBuilder>();
@@ -235,7 +217,181 @@ namespace Fergun.Interactive.Selection
                 }
             }
 
-            return builder.Build();
+            return builder;
+        }
+
+        /// <inheritdoc cref="IInteractiveInputHandler.HandleMessageAsync"/>
+        public virtual async Task<InteractiveInputResult<TOption>> HandleMessageAsync(IMessage input, IUserMessage message)
+        {
+            InteractiveGuards.NotNull(input, nameof(input));
+            InteractiveGuards.NotNull(message, nameof(message));
+
+            if (!InputType.HasFlag(InputType.Messages) || !this.CanInteract(input.Author))
+            {
+                return InteractiveInputStatus.Ignored;
+            }
+
+            bool manageMessages = await message.Channel.CurrentUserHasManageMessagesAsync().ConfigureAwait(false);
+
+            TOption? selected = default;
+            string? selectedString = null;
+            foreach (var value in Options)
+            {
+                string? temp = StringConverter?.Invoke(value);
+                if (temp != input.Content) continue;
+                selectedString = temp;
+                selected = value;
+                break;
+            }
+
+            if (selectedString is null)
+            {
+                if (manageMessages && Deletion.HasFlag(DeletionOptions.Invalid))
+                {
+                    await input.DeleteAsync().ConfigureAwait(false);
+                }
+                return InteractiveInputStatus.Ignored;
+            }
+
+            bool isCanceled = AllowCancel && StringConverter?.Invoke(CancelOption) == selectedString;
+
+            if (isCanceled)
+            {
+                return new(InteractiveInputStatus.Canceled, selected!);
+            }
+
+            if (manageMessages && Deletion.HasFlag(DeletionOptions.Valid))
+            {
+                await input.DeleteAsync().ConfigureAwait(false);
+            }
+
+            return new(InteractiveInputStatus.Success, selected!);
+        }
+
+        /// <inheritdoc cref="IInteractiveInputHandler.HandleReactionAsync"/>
+        public virtual async Task<InteractiveInputResult<TOption>> HandleReactionAsync(SocketReaction input, IUserMessage message)
+        {
+            InteractiveGuards.NotNull(input, nameof(input));
+            InteractiveGuards.NotNull(message, nameof(message));
+
+            if (!InputType.HasFlag(InputType.Reactions) || !this.CanInteract(input.UserId))
+            {
+                return InteractiveInputStatus.Ignored;
+            }
+
+            bool manageMessages = await message.Channel.CurrentUserHasManageMessagesAsync().ConfigureAwait(false);
+
+            TOption? selected = default;
+            IEmote? selectedEmote = null;
+            foreach (var value in Options)
+            {
+                var temp = EmoteConverter?.Invoke(value);
+                if (temp?.Name != input.Emote.Name) continue;
+                selectedEmote = temp;
+                selected = value;
+                break;
+            }
+
+            if (selectedEmote is null)
+            {
+                if (manageMessages && Deletion.HasFlag(DeletionOptions.Invalid))
+                {
+                    await message.RemoveReactionAsync(input.Emote, input.UserId).ConfigureAwait(false);
+                }
+                return InteractiveInputStatus.Ignored;
+            }
+
+            bool isCanceled = AllowCancel && EmoteConverter?.Invoke(CancelOption).Name == selectedEmote.Name;
+
+            if (isCanceled)
+            {
+                return new(InteractiveInputStatus.Canceled, selected);
+            }
+
+            if (manageMessages && Deletion.HasFlag(DeletionOptions.Valid))
+            {
+                await message.RemoveReactionAsync(input.Emote, input.UserId).ConfigureAwait(false);
+            }
+
+            return new(InteractiveInputStatus.Success, selected);
+        }
+
+        /// <inheritdoc cref="IInteractiveInputHandler.HandleInteractionAsync"/>
+        public virtual Task<InteractiveInputResult<TOption>> HandleInteractionAsync(SocketMessageComponent input, IUserMessage message)
+            => Task.FromResult(HandleInteraction(input, message));
+
+        private InteractiveInputResult<TOption> HandleInteraction(SocketMessageComponent input, IUserMessage message)
+        {
+            InteractiveGuards.NotNull(input, nameof(input));
+            InteractiveGuards.NotNull(message, nameof(message));
+
+            if (!InputType.HasFlag(InputType.Buttons) && !InputType.HasFlag(InputType.SelectMenus))
+            {
+                return InteractiveInputStatus.Ignored;
+            }
+
+            if (input.Message.Id != message.Id || !this.CanInteract(input.User))
+            {
+                return InteractiveInputStatus.Ignored;
+            }
+
+            TOption? selected = default;
+            string? selectedString = null;
+            string? customId = input.Data.Type switch
+            {
+                ComponentType.Button => input.Data.CustomId,
+                ComponentType.SelectMenu => (input
+                        .Message
+                        .Components
+                        .FirstOrDefault(x => x.Components.Any(y => y.Type == ComponentType.SelectMenu && y.CustomId == input.Data.CustomId))?
+                        .Components
+                        .FirstOrDefault() as SelectMenuComponent)?
+                    .Options
+                    .FirstOrDefault(x => x.Value == input.Data.Values.FirstOrDefault())?
+                    .Value,
+                _ => null
+            };
+
+            if (customId is null)
+            {
+                return InteractiveInputStatus.Ignored;
+            }
+
+            foreach (var value in Options)
+            {
+                string? stringValue = EmoteConverter?.Invoke(value)?.ToString() ?? StringConverter?.Invoke(value);
+                if (customId != stringValue) continue;
+                selected = value;
+                selectedString = stringValue;
+                break;
+            }
+
+            if (selectedString is null)
+            {
+                return InteractiveInputStatus.Ignored;
+            }
+
+            bool isCanceled = AllowCancel && (EmoteConverter?.Invoke(CancelOption)?.ToString() ?? StringConverter?.Invoke(CancelOption)) == selectedString;
+
+            return new(isCanceled ? InteractiveInputStatus.Canceled : InteractiveInputStatus.Success, selected);
+        }
+
+        /// <inheritdoc/>
+        async Task<IInteractiveResult<InteractiveInputStatus>> IInteractiveInputHandler.HandleMessageAsync(IMessage input, IUserMessage message)
+            => await HandleMessageAsync(input, message).ConfigureAwait(false);
+
+        /// <inheritdoc/>
+        async Task<IInteractiveResult<InteractiveInputStatus>> IInteractiveInputHandler.HandleReactionAsync(IReaction input, IUserMessage message)
+        {
+            InteractiveGuards.ExpectedType<IReaction, SocketReaction>(input, nameof(input), out var socketReaction);
+            return await HandleReactionAsync(socketReaction, message).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc/>
+        async Task<IInteractiveResult<InteractiveInputStatus>> IInteractiveInputHandler.HandleInteractionAsync(IComponentInteraction input, IUserMessage message)
+        {
+            InteractiveGuards.ExpectedType<IComponentInteraction, SocketMessageComponent>(input, nameof(input), out var socketMessageComponent);
+            return await HandleInteractionAsync(socketMessageComponent, message).ConfigureAwait(false);
         }
     }
 }

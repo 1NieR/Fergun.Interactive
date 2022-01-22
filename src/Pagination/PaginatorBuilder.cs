@@ -1,17 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using Discord;
 
 namespace Fergun.Interactive.Pagination
 {
     /// <summary>
-    /// Represents an abstract paginator builder.
+    /// Represents the properties of a <see cref="PaginatorBuilder{TPaginator, TBuilder}"/>
     /// </summary>
-    public abstract class PaginatorBuilder<TPaginator, TBuilder>
-        : IInteractiveBuilder<TPaginator, KeyValuePair<IEmote, PaginatorAction>, TBuilder>
-        where TPaginator : Paginator
-        where TBuilder : PaginatorBuilder<TPaginator, TBuilder>
+    public abstract class PaginatorBuilderProperties : IInteractiveBuilderProperties<KeyValuePair<IEmote, PaginatorAction>>
     {
         /// <summary>
         /// Gets whether the paginator is restricted to <see cref="Users"/>.
@@ -19,26 +17,31 @@ namespace Fergun.Interactive.Pagination
         public virtual bool IsUserRestricted => Users.Count > 0;
 
         /// <summary>
-        /// Gets or sets the footer format in the <see cref="Embed"/> of the <typeparamref name="TPaginator"/>.
+        /// Gets or sets the index of the page the paginator should start.
+        /// </summary>
+        public virtual int StartPageIndex { get; set; }
+
+        /// <summary>
+        /// Gets or sets the footer format in the <see cref="Embed"/> of the paginator.
         /// </summary>
         /// <remarks>Setting this to other than <see cref="PaginatorFooter.None"/> will override any other footer in the pages.</remarks>
         public virtual PaginatorFooter Footer { get; set; } = PaginatorFooter.PageNumber;
 
         /// <summary>
-        /// Gets or sets the users who can interact with the <typeparamref name="TPaginator"/>.
+        /// Gets or sets the users who can interact with the paginator.
         /// </summary>
-        public virtual IList<IUser> Users { get; set; } = new List<IUser>();
+        public virtual ICollection<IUser> Users { get; set; } = new Collection<IUser>();
 
         /// <summary>
-        /// Gets or sets the emotes and their related actions of the <typeparamref name="TPaginator"/>.
+        /// Gets or sets the emotes and their related actions of the paginator.
         /// </summary>
         public virtual IDictionary<IEmote, PaginatorAction> Options { get; set; } = new Dictionary<IEmote, PaginatorAction>();
 
         /// <inheritdoc/>
-        public virtual PageBuilder? CanceledPage { get; set; }
+        public virtual IPageBuilder? CanceledPage { get; set; }
 
         /// <inheritdoc/>
-        public virtual PageBuilder? TimeoutPage { get; set; }
+        public virtual IPageBuilder? TimeoutPage { get; set; }
 
         /// <inheritdoc/>
         /// <remarks>This property is ignored in button-based paginators.</remarks>
@@ -56,24 +59,37 @@ namespace Fergun.Interactive.Pagination
         public virtual ActionOnStop ActionOnTimeout { get; set; } = ActionOnStop.ModifyMessage;
 
         /// <inheritdoc/>
-        ICollection<KeyValuePair<IEmote, PaginatorAction>> IInteractiveBuilder<TPaginator, KeyValuePair<IEmote, PaginatorAction>, TBuilder>.Options
+        ICollection<KeyValuePair<IEmote, PaginatorAction>> IInteractiveBuilderProperties<KeyValuePair<IEmote, PaginatorAction>>.Options
         {
             get => Options;
             set => Options = value?.ToDictionary(x => x.Key, x => x.Value) ?? throw new ArgumentNullException(nameof(value));
         }
+    }
 
-        ICollection<IUser> IInteractiveBuilder<TPaginator, KeyValuePair<IEmote, PaginatorAction>, TBuilder>.Users
-        {
-            get => Users;
-            set => Users = value?.ToList() ?? throw new ArgumentNullException(nameof(value));
-        }
+    /// <summary>
+    /// Represents an abstract paginator builder.
+    /// </summary>
+    public abstract class PaginatorBuilder<TPaginator, TBuilder>
+        : PaginatorBuilderProperties, IInteractiveBuilder<TPaginator, KeyValuePair<IEmote, PaginatorAction>, TBuilder>
+        where TPaginator : Paginator
+        where TBuilder : PaginatorBuilder<TPaginator, TBuilder>
+    {
+        /// <summary>
+        /// Builds this <typeparamref name="TBuilder"/> into an immutable <typeparamref name="TPaginator"/>.
+        /// </summary>
+        /// <returns>A <typeparamref name="TPaginator"/>.</returns>
+        public abstract TPaginator Build();
 
         /// <summary>
-        /// Builds the <see cref="PaginatorBuilder{TPaginator, TBuilder}"/> to an immutable paginator.
+        /// Sets the index of the page the <typeparamref name="TPaginator"/> should start.
         /// </summary>
-        /// <param name="startPageIndex">The index of the page the paginator should start.</param>
-        /// <returns>A <typeparamref name="TPaginator"/>.</returns>
-        public abstract TPaginator Build(int startPageIndex = 0);
+        /// <param name="startPageIndex">The index of the page the <typeparamref name="TPaginator"/> should start.</param>
+        /// <returns>This builder.</returns>
+        public virtual TBuilder WithStartPageIndex(int startPageIndex)
+        {
+            StartPageIndex = startPageIndex;
+            return (TBuilder)this;
+        }
 
         /// <summary>
         /// Gets the footer format in the <see cref="Embed"/> of the <typeparamref name="TPaginator"/>.
@@ -147,22 +163,22 @@ namespace Fergun.Interactive.Pagination
         }
 
         /// <summary>
-        /// Sets the <see cref="Page"/> which the <typeparamref name="TPaginator"/> gets modified to after a cancellation.
+        /// Sets the <see cref="IPage"/> which the <typeparamref name="TPaginator"/> gets modified to after a cancellation.
         /// </summary>
         /// <param name="page">The page.</param>
         /// <returns>This builder.</returns>
-        public virtual TBuilder WithCanceledPage(PageBuilder? page)
+        public virtual TBuilder WithCanceledPage(IPageBuilder? page)
         {
             CanceledPage = page;
             return (TBuilder)this;
         }
 
         /// <summary>
-        /// Sets the <see cref="Page"/> which the <typeparamref name="TPaginator"/> gets modified to after a timeout.
+        /// Sets the <see cref="IPage"/> which the <typeparamref name="TPaginator"/> gets modified to after a timeout.
         /// </summary>
         /// <param name="page">The page.</param>
         /// <returns>This builder.</returns>
-        public virtual TBuilder WithTimeoutPage(PageBuilder? page)
+        public virtual TBuilder WithTimeoutPage(IPageBuilder? page)
         {
             TimeoutPage = page;
             return (TBuilder)this;
@@ -233,10 +249,10 @@ namespace Fergun.Interactive.Pagination
             => WithTimeoutPage(new PageBuilder().WithColor(Color.Red).WithTitle("Timed out! ⏰"));
 
         /// <inheritdoc/>
-        TPaginator IInteractiveBuilder<TPaginator, KeyValuePair<IEmote, PaginatorAction>, TBuilder>.Build() => Build();
+        TPaginator IInteractiveBuilderMethods<TPaginator, KeyValuePair<IEmote, PaginatorAction>, TBuilder>.Build() => Build();
 
         /// <inheritdoc/>
-        TBuilder IInteractiveBuilder<TPaginator, KeyValuePair<IEmote, PaginatorAction>, TBuilder>.WithOptions(ICollection<KeyValuePair<IEmote, PaginatorAction>> options)
+        TBuilder IInteractiveBuilderMethods<TPaginator, KeyValuePair<IEmote, PaginatorAction>, TBuilder>.WithOptions(ICollection<KeyValuePair<IEmote, PaginatorAction>> options)
             => WithOptions(options.ToDictionary(x => x.Key, x => x.Value));
     }
 }

@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using Discord;
 using Discord.WebSocket;
-using Fergun.Interactive.Pagination;
 
 namespace Fergun.Interactive
 {
@@ -12,6 +14,61 @@ namespace Fergun.Interactive
             if (obj is null)
             {
                 throw new ArgumentNullException(parameterName);
+            }
+        }
+
+        public static void NotEmpty<T>(ICollection<T> collection, string parameterName)
+        {
+            if (collection.Count == 0)
+            {
+                throw new ArgumentException("Collection must not be empty.", parameterName);
+            }
+        }
+
+        public static void NotCanceled(CancellationToken cancellationToken, string parameterName)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw new ArgumentException("Cancellation token must not be canceled.", parameterName);
+            }
+        }
+
+        public static void NoDuplicates<TOption>(ICollection<TOption> collection, IEqualityComparer<TOption> equalityComparer, string parameterName)
+        {
+            if (collection.Distinct(equalityComparer).Count() != collection.Count)
+            {
+                throw new ArgumentException("Collection must not contain duplicate elements.", parameterName);
+            }
+        }
+
+        public static void IndexInRange<T>(ICollection<T> collection, int index, string parameterName)
+        {
+            if (index < 0 || index >= collection.Count)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, index, $"Index must be greater than or equal to 0 and lower than {collection.Count}.");
+            }
+        }
+
+        public static void ExpectedType<TInput, TExpected>(TInput obj, string parameterName, out TExpected expected)
+        {
+            if (obj is not TExpected temp)
+            {
+                throw new ArgumentException($"Parameter must be of type {typeof(TExpected)}.", parameterName);
+            }
+
+            expected = temp;
+        }
+
+        public static void EmbedCountInRange(ICollection<EmbedBuilder> builders, string parameterName)
+        {
+            EmbedCountInRange(builders.Count, parameterName);
+        }
+
+        public static void EmbedCountInRange(int count, string parameterName)
+        {
+            if (count > 10)
+            {
+                throw new ArgumentException("A page cannot have more than 10 embeds.", parameterName);
             }
         }
 
@@ -37,28 +94,40 @@ namespace Fergun.Interactive
         }
 
         public static void SupportedInputType<TOption>(IInteractiveElement<TOption> element, bool ephemeral)
+            => SupportedInputType(element.InputType, ephemeral);
+
+        public static void SupportedInputType(InputType inputType, bool ephemeral)
         {
-            if (element.InputType == 0)
+            if (inputType == 0)
             {
                 throw new ArgumentException("At least one input type must be set.");
             }
 
-            if (ephemeral && element.InputType.HasFlag(InputType.Reactions))
+            if (ephemeral && inputType.HasFlag(InputType.Reactions))
             {
                 throw new NotSupportedException("Ephemeral messages cannot use reactions as input.");
             }
+        }
 
-            if (element is Paginator paginator)
+        // The paginators included in the library don't support messages or select menus as input
+        public static void SupportedPaginatorInputType(InputType inputType)
+        {
+            if (inputType.HasFlag(InputType.Messages))
             {
-                if (paginator.InputType.HasFlag(InputType.Messages))
-                {
-                    throw new NotSupportedException("Paginators using messages as input are not supported (yet).");
-                }
+                throw new NotSupportedException("This paginator doesn't support using messages as inputs.");
+            }
 
-                if (paginator.InputType.HasFlag(InputType.SelectMenus))
-                {
-                    throw new NotSupportedException("Paginators using select menus as input are not supported (yet).");
-                }
+            if (inputType.HasFlag(InputType.SelectMenus))
+            {
+                throw new NotSupportedException("This paginator doesn't support using select menus as input.");
+            }
+        }
+
+        public static void RequiredEmoteConverter<TOption>(InputType inputType, Func<TOption, IEmote>? emoteConverter)
+        {
+            if (inputType.HasFlag(InputType.Reactions) && emoteConverter is null)
+            {
+                throw new ArgumentNullException(nameof(emoteConverter), $"{nameof(emoteConverter)} is required when {nameof(inputType)} has InputType.Reactions.");
             }
         }
 

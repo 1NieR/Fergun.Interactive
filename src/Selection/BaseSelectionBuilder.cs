@@ -1,19 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using Discord;
 
 namespace Fergun.Interactive.Selection
 {
     /// <summary>
-    /// Represents the base of the selection builders. Custom selection builders should inherit this class to allow fluent interface usage.
+    /// Represents the properties in a <see cref="BaseSelectionBuilder{TSelection, TOption, TBuilder}"/>
     /// </summary>
-    /// <typeparam name="TSelection">The type of the built selection.</typeparam>
     /// <typeparam name="TOption">The type of the options the selection will have.</typeparam>
-    /// <typeparam name="TBuilder">The type of this builder.</typeparam>
-    public abstract class BaseSelectionBuilder<TSelection, TOption, TBuilder> : IInteractiveBuilder<TSelection, TOption, TBuilder>
-        where TSelection : BaseSelection<TOption>
-        where TBuilder : BaseSelectionBuilder<TSelection, TOption, TBuilder>
+    public abstract class BaseSelectionBuilderProperties<TOption> : IInteractiveBuilderProperties<TOption>
     {
         /// <summary>
         /// Gets whether the selection is restricted to <see cref="Users"/>.
@@ -57,31 +54,31 @@ namespace Fergun.Interactive.Selection
         public virtual bool AllowCancel { get; set; }
 
         /// <summary>
-        /// Gets or sets the <see cref="Page"/> which is sent into the channel.
+        /// Gets or sets the <see cref="IPage"/> which is sent into the channel.
         /// </summary>
-        public virtual PageBuilder SelectionPage { get; set; } = null!;
+        public virtual IPageBuilder SelectionPage { get; set; } = null!;
 
         /// <summary>
         /// Gets or sets the users who can interact with the <see cref="BaseSelection{TOption}"/>.
         /// </summary>
-        public virtual IList<IUser> Users { get; set; } = new List<IUser>();
+        public virtual ICollection<IUser> Users { get; set; } = new Collection<IUser>();
 
         /// <summary>
         /// Gets or sets the options to select from.
         /// </summary>
-        public virtual ICollection<TOption> Options { get; set; } = new List<TOption>();
+        public virtual ICollection<TOption> Options { get; set; } = new Collection<TOption>();
 
         /// <inheritdoc />
-        public virtual PageBuilder? CanceledPage { get; set; }
+        public virtual IPageBuilder? CanceledPage { get; set; }
 
         /// <inheritdoc />
-        public virtual PageBuilder? TimeoutPage { get; set; }
+        public virtual IPageBuilder? TimeoutPage { get; set; }
 
         /// <summary>
-        /// Gets or sets the <see cref="Page"/> which the <see cref="BaseSelection{TOption}"/>
+        /// Gets or sets the <see cref="IPage"/> which the <see cref="BaseSelection{TOption}"/>
         /// gets modified to after a valid input is received (except cancellation inputs).
         /// </summary>
-        public virtual PageBuilder? SuccessPage { get; set; }
+        public virtual IPageBuilder? SuccessPage { get; set; }
 
         /// <inheritdoc />
         public virtual DeletionOptions Deletion { get; set; } = DeletionOptions.Valid;
@@ -99,15 +96,23 @@ namespace Fergun.Interactive.Selection
         /// Gets or sets the action that will be done after valid input is received (except cancellation inputs).
         /// </summary>
         public virtual ActionOnStop ActionOnSuccess { get; set; }
+    }
 
-        /// <inheritdoc/>
-        ICollection<IUser> IInteractiveBuilder<TSelection, TOption, TBuilder>.Users
-        {
-            get => Users;
-            set => Users = value?.ToList() ?? throw new ArgumentNullException(nameof(value));
-        }
-
-        /// <inheritdoc />
+    /// <summary>
+    /// Represents the base of the selection builders.
+    /// </summary>
+    /// <typeparam name="TSelection">The type of the built selection.</typeparam>
+    /// <typeparam name="TOption">The type of the options the selection will have.</typeparam>
+    /// <typeparam name="TBuilder">The type of this builder.</typeparam>
+    public abstract class BaseSelectionBuilder<TSelection, TOption, TBuilder>
+        : BaseSelectionBuilderProperties<TOption>, IInteractiveBuilder<TSelection, TOption, TBuilder>
+        where TSelection : BaseSelection<TOption>
+        where TBuilder : BaseSelectionBuilder<TSelection, TOption, TBuilder>
+    {
+        /// <summary>
+        /// Builds this <typeparamref name="TBuilder"/> into an immutable <typeparamref name="TSelection"/>.
+        /// </summary>
+        /// <returns>A <typeparamref name="TSelection"/>.</returns>
         public abstract TSelection Build();
 
         /// <summary>
@@ -117,7 +122,7 @@ namespace Fergun.Interactive.Selection
         /// Requirements for each input type:<br/><br/>
         /// Reactions: Required.<br/>
         /// Messages: Unused.<br/>
-        /// Buttons: Required (for emotes) unless a <see cref="StringConverter"/> is provided (for labels).<br/>
+        /// Buttons: Required (for emotes) unless a <see cref="BaseSelectionBuilderProperties{TOption}.StringConverter"/> is provided (for labels).<br/>
         /// Select menus: Optional.
         /// </remarks>
         public virtual TBuilder WithEmoteConverter(Func<TOption, IEmote> emoteConverter)
@@ -133,7 +138,7 @@ namespace Fergun.Interactive.Selection
         /// Requirements for each input type:<br/><br/>
         /// Reactions: Unused.<br/>
         /// Messages: Required. If not set, defaults to <see cref="object.ToString()"/>.<br/>
-        /// Buttons: Required (for labels) unless a <see cref="EmoteConverter"/> is provided (for emotes). Defaults to <see cref="object.ToString()"/> if neither are set.<br/>
+        /// Buttons: Required (for labels) unless a <see cref="BaseSelectionBuilderProperties{TOption}.EmoteConverter"/> is provided (for emotes). Defaults to <see cref="object.ToString()"/> if neither are set.<br/>
         /// Select menus: Required. If not set, defaults to <see cref="object.ToString()"/>.
         /// </remarks>
         public virtual TBuilder WithStringConverter(Func<TOption, string>? stringConverter)
@@ -155,7 +160,7 @@ namespace Fergun.Interactive.Selection
         /// <summary>
         /// Sets whether the <see cref="BaseSelection{TOption}"/> allows for cancellation.
         /// </summary>
-        /// <remarks>When this value is <see langword="true"/>, the last element in <see cref="Options"/>
+        /// <remarks>When this value is <see langword="true"/>, the last element in <see cref="BaseSelectionBuilderProperties{TOption}.Options"/>
         /// will be used to cancel the <see cref="BaseSelection{TOption}"/>.</remarks>
         /// <returns>This builder.</returns>
         public virtual TBuilder WithAllowCancel(bool allowCancel)
@@ -165,11 +170,11 @@ namespace Fergun.Interactive.Selection
         }
 
         /// <summary>
-        /// Sets the <see cref="Page"/> which is sent into the channel.
+        /// Sets the <see cref="IPage"/> which is sent into the channel.
         /// </summary>
         /// <param name="page">The page.</param>
         /// <returns>This builder.</returns>
-        public virtual TBuilder WithSelectionPage(PageBuilder page)
+        public virtual TBuilder WithSelectionPage(IPageBuilder page)
         {
             SelectionPage = page ?? throw new ArgumentNullException(nameof(page));
             return (TBuilder)this;
@@ -223,33 +228,33 @@ namespace Fergun.Interactive.Selection
         }
 
         /// <summary>
-        /// Sets the <see cref="Page"/> which the <see cref="BaseSelection{TOption}"/> gets modified to after a cancellation.
+        /// Sets the <see cref="IPage"/> which the <see cref="BaseSelection{TOption}"/> gets modified to after a cancellation.
         /// </summary>
         /// <param name="page">The page.</param>
         /// <returns>This builder.</returns>
-        public virtual TBuilder WithCanceledPage(PageBuilder? page)
+        public virtual TBuilder WithCanceledPage(IPageBuilder? page)
         {
             CanceledPage = page;
             return (TBuilder)this;
         }
 
         /// <summary>
-        /// Sets the <see cref="Page"/> which the <see cref="BaseSelection{TOption}"/> gets modified to after a timeout.
+        /// Sets the <see cref="IPage"/> which the <see cref="BaseSelection{TOption}"/> gets modified to after a timeout.
         /// </summary>
         /// <param name="page">The page.</param>
         /// <returns>This builder.</returns>
-        public virtual TBuilder WithTimeoutPage(PageBuilder? page)
+        public virtual TBuilder WithTimeoutPage(IPageBuilder? page)
         {
             TimeoutPage = page;
             return (TBuilder)this;
         }
 
         /// <summary>
-        /// Sets the <see cref="Page"/> which the <see cref="BaseSelection{TOption}"/> gets modified to after a valid input is received (except cancellation inputs).
+        /// Sets the <see cref="IPage"/> which the <see cref="BaseSelection{TOption}"/> gets modified to after a valid input is received (except cancellation inputs).
         /// </summary>
         /// <param name="page">The page.</param>
         /// <returns>This builder.</returns>
-        public virtual TBuilder WithSuccessPage(PageBuilder? page)
+        public virtual TBuilder WithSuccessPage(IPageBuilder? page)
         {
             SuccessPage = page;
             return (TBuilder)this;
