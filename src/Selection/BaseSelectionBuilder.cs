@@ -7,60 +7,35 @@ using Discord;
 namespace Fergun.Interactive.Selection
 {
     /// <summary>
-    /// Represents the properties in a <see cref="BaseSelectionBuilder{TSelection, TOption, TBuilder}"/>
+    /// Represents the base of the selection builders.
     /// </summary>
+    /// <typeparam name="TSelection">The type of the built selection.</typeparam>
     /// <typeparam name="TOption">The type of the options the selection will have.</typeparam>
-    public abstract class BaseSelectionBuilderProperties<TOption> : IInteractiveBuilderProperties<TOption>
+    /// <typeparam name="TBuilder">The type of this builder.</typeparam>
+    public abstract class BaseSelectionBuilder<TSelection, TOption, TBuilder>
+        : IInteractiveBuilder<TSelection, TOption, TBuilder>, IBaseSelectionBuilderProperties<TOption>
+        where TSelection : BaseSelection<TOption>
+        where TBuilder : BaseSelectionBuilder<TSelection, TOption, TBuilder>
     {
-        /// <summary>
-        /// Gets whether the selection is restricted to <see cref="Users"/>.
-        /// </summary>
+        /// <inheritdoc/>
         public virtual bool IsUserRestricted => Users.Count > 0;
 
-        /// <summary>
-        /// Gets or sets a function that returns an <see cref="IEmote"/> representation of a <typeparamref name="TOption"/>.
-        /// </summary>
-        /// <remarks>
-        /// Requirements for each input type:<br/><br/>
-        /// Reactions: Required.<br/>
-        /// Messages: Unused.<br/>
-        /// Buttons: Required (for emotes) unless a <see cref="StringConverter"/> is provided (for labels).<br/>
-        /// Select menus: Optional.
-        /// </remarks>
+        /// <inheritdoc/>
         public virtual Func<TOption, IEmote>? EmoteConverter { get; set; }
 
-        /// <summary>
-        /// Gets or sets a function that returns a <see cref="string"/> representation of a <typeparamref name="TOption"/>.
-        /// </summary>
-        /// <remarks>
-        /// Requirements for each input type:<br/><br/>
-        /// Reactions: Unused.<br/>
-        /// Messages: Required. If not set, defaults to <see cref="object.ToString()"/>.<br/>
-        /// Buttons: Required (for labels) unless a <see cref="EmoteConverter"/> is provided (for emotes). Defaults to <see cref="object.ToString()"/> if neither are set.<br/>
-        /// Select menus: Required. If not set, defaults to <see cref="object.ToString()"/>.
-        /// </remarks>
+        /// <inheritdoc/>
         public virtual Func<TOption, string>? StringConverter { get; set; }
 
-        /// <summary>
-        /// Gets or sets the equality comparer of <typeparamref name="TOption"/>s.
-        /// </summary>
+        /// <inheritdoc/>
         public virtual IEqualityComparer<TOption> EqualityComparer { get; set; } = EqualityComparer<TOption>.Default;
 
-        /// <summary>
-        /// Gets or sets whether the <see cref="BaseSelection{TOption}"/> allows for cancellation.
-        /// </summary>
-        /// <remarks>When this value is <see langword="true"/>, the last element in <see cref="Options"/>
-        /// will be used to cancel the <see cref="BaseSelection{TOption}"/>.</remarks>
+        /// <inheritdoc/>
         public virtual bool AllowCancel { get; set; }
 
-        /// <summary>
-        /// Gets or sets the <see cref="IPage"/> which is sent into the channel.
-        /// </summary>
+        /// <inheritdoc/>
         public virtual IPageBuilder SelectionPage { get; set; } = null!;
 
-        /// <summary>
-        /// Gets or sets the users who can interact with the <see cref="BaseSelection{TOption}"/>.
-        /// </summary>
+        /// <inheritdoc/>
         public virtual ICollection<IUser> Users { get; set; } = new Collection<IUser>();
 
         /// <summary>
@@ -74,10 +49,7 @@ namespace Fergun.Interactive.Selection
         /// <inheritdoc />
         public virtual IPageBuilder? TimeoutPage { get; set; }
 
-        /// <summary>
-        /// Gets or sets the <see cref="IPage"/> which the <see cref="BaseSelection{TOption}"/>
-        /// gets modified to after a valid input is received (except cancellation inputs).
-        /// </summary>
+        /// <inheritdoc/>
         public virtual IPageBuilder? SuccessPage { get; set; }
 
         /// <inheritdoc />
@@ -92,23 +64,9 @@ namespace Fergun.Interactive.Selection
         /// <inheritdoc />
         public virtual ActionOnStop ActionOnTimeout { get; set; }
 
-        /// <summary>
-        /// Gets or sets the action that will be done after valid input is received (except cancellation inputs).
-        /// </summary>
+        /// <inheritdoc/>
         public virtual ActionOnStop ActionOnSuccess { get; set; }
-    }
 
-    /// <summary>
-    /// Represents the base of the selection builders.
-    /// </summary>
-    /// <typeparam name="TSelection">The type of the built selection.</typeparam>
-    /// <typeparam name="TOption">The type of the options the selection will have.</typeparam>
-    /// <typeparam name="TBuilder">The type of this builder.</typeparam>
-    public abstract class BaseSelectionBuilder<TSelection, TOption, TBuilder>
-        : BaseSelectionBuilderProperties<TOption>, IInteractiveBuilder<TSelection, TOption, TBuilder>
-        where TSelection : BaseSelection<TOption>
-        where TBuilder : BaseSelectionBuilder<TSelection, TOption, TBuilder>
-    {
         /// <summary>
         /// Builds this <typeparamref name="TBuilder"/> into an immutable <typeparamref name="TSelection"/>.
         /// </summary>
@@ -118,13 +76,15 @@ namespace Fergun.Interactive.Selection
         /// <summary>
         /// Sets a function that returns an <see cref="IEmote"/> representation of a <typeparamref name="TOption"/>.
         /// </summary>
+        /// <param name="emoteConverter">The emote converter.</param>
         /// <remarks>
         /// Requirements for each input type:<br/><br/>
         /// Reactions: Required.<br/>
         /// Messages: Unused.<br/>
-        /// Buttons: Required (for emotes) unless a <see cref="BaseSelectionBuilderProperties{TOption}.StringConverter"/> is provided (for labels).<br/>
+        /// Buttons: Required (for emotes) unless a <see cref="StringConverter"/> is provided (for labels).<br/>
         /// Select menus: Optional.
         /// </remarks>
+        /// <returns>This builder.</returns>
         public virtual TBuilder WithEmoteConverter(Func<TOption, IEmote> emoteConverter)
         {
             EmoteConverter = emoteConverter;
@@ -134,13 +94,15 @@ namespace Fergun.Interactive.Selection
         /// <summary>
         /// Sets a function that returns a <see cref="string"/> representation of a <typeparamref name="TOption"/>.
         /// </summary>
+        /// <param name="stringConverter">The string converter.</param>
         /// <remarks>
         /// Requirements for each input type:<br/><br/>
         /// Reactions: Unused.<br/>
         /// Messages: Required. If not set, defaults to <see cref="object.ToString()"/>.<br/>
-        /// Buttons: Required (for labels) unless a <see cref="BaseSelectionBuilderProperties{TOption}.EmoteConverter"/> is provided (for emotes). Defaults to <see cref="object.ToString()"/> if neither are set.<br/>
+        /// Buttons: Required (for labels) unless a <see cref="EmoteConverter"/> is provided (for emotes). Defaults to <see cref="object.ToString()"/> if neither are set.<br/>
         /// Select menus: Required. If not set, defaults to <see cref="object.ToString()"/>.
         /// </remarks>
+        /// <returns>This builder.</returns>
         public virtual TBuilder WithStringConverter(Func<TOption, string>? stringConverter)
         {
             StringConverter = stringConverter;
@@ -150,17 +112,20 @@ namespace Fergun.Interactive.Selection
         /// <summary>
         /// Sets the equality comparer of <typeparamref name="TOption"/>s.
         /// </summary>
+        /// <param name="equalityComparer">The equality comparer.</param>
         /// <returns>This builder.</returns>
         public virtual TBuilder WithEqualityComparer(IEqualityComparer<TOption> equalityComparer)
         {
-            EqualityComparer = equalityComparer ?? throw new ArgumentNullException(nameof(equalityComparer));
+            InteractiveGuards.NotNull(equalityComparer, nameof(equalityComparer));
+            EqualityComparer = equalityComparer;
             return (TBuilder)this;
         }
 
         /// <summary>
         /// Sets whether the <see cref="BaseSelection{TOption}"/> allows for cancellation.
         /// </summary>
-        /// <remarks>When this value is <see langword="true"/>, the last element in <see cref="BaseSelectionBuilderProperties{TOption}.Options"/>
+        /// <param name="allowCancel">Whether this selection allows for cancellation.</param>
+        /// <remarks>When this value is <see langword="true"/>, the last element in <see cref="Options"/>
         /// will be used to cancel the <see cref="BaseSelection{TOption}"/>.</remarks>
         /// <returns>This builder.</returns>
         public virtual TBuilder WithAllowCancel(bool allowCancel)
@@ -176,7 +141,8 @@ namespace Fergun.Interactive.Selection
         /// <returns>This builder.</returns>
         public virtual TBuilder WithSelectionPage(IPageBuilder page)
         {
-            SelectionPage = page ?? throw new ArgumentNullException(nameof(page));
+            InteractiveGuards.NotNull(page, nameof(page));
+            SelectionPage = page;
             return (TBuilder)this;
         }
 
@@ -187,7 +153,8 @@ namespace Fergun.Interactive.Selection
         /// <returns>This builder.</returns>
         public virtual TBuilder WithUsers(params IUser[] users)
         {
-            Users = users?.ToList() ?? throw new ArgumentNullException(nameof(users));
+            InteractiveGuards.NotNull(users, nameof(users));
+            Users = users.ToList();
             return (TBuilder)this;
         }
 
@@ -198,7 +165,8 @@ namespace Fergun.Interactive.Selection
         /// <returns>This builder.</returns>
         public virtual TBuilder WithUsers(IEnumerable<IUser> users)
         {
-            Users = users?.ToList() ?? throw new ArgumentNullException(nameof(users));
+            InteractiveGuards.NotNull(users, nameof(users));
+            Users = users.ToList();
             return (TBuilder)this;
         }
 
@@ -209,14 +177,16 @@ namespace Fergun.Interactive.Selection
         /// <returns>This builder.</returns>
         public virtual TBuilder AddUser(IUser user)
         {
-            Users.Add(user ?? throw new ArgumentNullException(nameof(user)));
+            InteractiveGuards.NotNull(user, nameof(user));
+            Users.Add(user);
             return (TBuilder)this;
         }
 
         /// <inheritdoc/>
         public virtual TBuilder WithOptions(ICollection<TOption> options)
         {
-            Options = options ?? throw new ArgumentNullException(nameof(options));
+            InteractiveGuards.NotNull(options, nameof(options));
+            Options = options;
             return (TBuilder)this;
         }
 

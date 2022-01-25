@@ -40,7 +40,7 @@ namespace Fergun.Interactive
                 throw new ArgumentException("Collection must not contain duplicate elements.", parameterName);
             }
         }
-
+        //todo 
         public static void IndexInRange<T>(ICollection<T> collection, int index, string parameterName)
         {
             if (index < 0 || index >= collection.Count)

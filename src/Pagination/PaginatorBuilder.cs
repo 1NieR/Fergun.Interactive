@@ -7,24 +7,22 @@ using Discord;
 namespace Fergun.Interactive.Pagination
 {
     /// <summary>
-    /// Represents the properties of a <see cref="PaginatorBuilder{TPaginator, TBuilder}"/>
+    /// Represents an abstract paginator builder.
     /// </summary>
-    public abstract class PaginatorBuilderProperties : IInteractiveBuilderProperties<KeyValuePair<IEmote, PaginatorAction>>
+    /// <typeparam name="TPaginator">The type of the paginator.</typeparam>
+    /// <typeparam name="TBuilder">The type of the builder.</typeparam>
+    public abstract class PaginatorBuilder<TPaginator, TBuilder>
+        : IInteractiveBuilder<TPaginator, KeyValuePair<IEmote, PaginatorAction>, TBuilder>, IBasePaginatorBuilderProperties
+        where TPaginator : Paginator
+        where TBuilder : PaginatorBuilder<TPaginator, TBuilder>
     {
-        /// <summary>
-        /// Gets whether the paginator is restricted to <see cref="Users"/>.
-        /// </summary>
+        /// <inheritdoc/>
         public virtual bool IsUserRestricted => Users.Count > 0;
 
-        /// <summary>
-        /// Gets or sets the index of the page the paginator should start.
-        /// </summary>
+        /// <inheritdoc/>
         public virtual int StartPageIndex { get; set; }
 
-        /// <summary>
-        /// Gets or sets the footer format in the <see cref="Embed"/> of the paginator.
-        /// </summary>
-        /// <remarks>Setting this to other than <see cref="PaginatorFooter.None"/> will override any other footer in the pages.</remarks>
+        /// <inheritdoc/>
         public virtual PaginatorFooter Footer { get; set; } = PaginatorFooter.PageNumber;
 
         /// <summary>
@@ -32,9 +30,7 @@ namespace Fergun.Interactive.Pagination
         /// </summary>
         public virtual ICollection<IUser> Users { get; set; } = new Collection<IUser>();
 
-        /// <summary>
-        /// Gets or sets the emotes and their related actions of the paginator.
-        /// </summary>
+        /// <inheritdoc/>
         public virtual IDictionary<IEmote, PaginatorAction> Options { get; set; } = new Dictionary<IEmote, PaginatorAction>();
 
         /// <inheritdoc/>
@@ -44,7 +40,6 @@ namespace Fergun.Interactive.Pagination
         public virtual IPageBuilder? TimeoutPage { get; set; }
 
         /// <inheritdoc/>
-        /// <remarks>This property is ignored in button-based paginators.</remarks>
         public virtual DeletionOptions Deletion { get; set; } = DeletionOptions.Valid | DeletionOptions.Invalid;
 
         /// <inheritdoc/>
@@ -64,16 +59,7 @@ namespace Fergun.Interactive.Pagination
             get => Options;
             set => Options = value?.ToDictionary(x => x.Key, x => x.Value) ?? throw new ArgumentNullException(nameof(value));
         }
-    }
 
-    /// <summary>
-    /// Represents an abstract paginator builder.
-    /// </summary>
-    public abstract class PaginatorBuilder<TPaginator, TBuilder>
-        : PaginatorBuilderProperties, IInteractiveBuilder<TPaginator, KeyValuePair<IEmote, PaginatorAction>, TBuilder>
-        where TPaginator : Paginator
-        where TBuilder : PaginatorBuilder<TPaginator, TBuilder>
-    {
         /// <summary>
         /// Builds this <typeparamref name="TBuilder"/> into an immutable <typeparamref name="TPaginator"/>.
         /// </summary>
@@ -94,7 +80,9 @@ namespace Fergun.Interactive.Pagination
         /// <summary>
         /// Gets the footer format in the <see cref="Embed"/> of the <typeparamref name="TPaginator"/>.
         /// </summary>
+        /// <param name="footer">The footer.</param>
         /// <remarks>Setting this to other than <see cref="PaginatorFooter.None"/> will override any other footer in the pages.</remarks>
+        /// <returns>This builder.</returns>
         public virtual TBuilder WithFooter(PaginatorFooter footer)
         {
             Footer = footer;
@@ -108,7 +96,8 @@ namespace Fergun.Interactive.Pagination
         /// <returns>This builder.</returns>
         public virtual TBuilder WithUsers(params IUser[] users)
         {
-            Users = users?.ToList() ?? throw new ArgumentNullException(nameof(users));
+            InteractiveGuards.NotNull(users, nameof(users));
+            Users = users.ToList();
             return (TBuilder)this;
         }
 
@@ -119,7 +108,8 @@ namespace Fergun.Interactive.Pagination
         /// <returns>This builder.</returns>
         public virtual TBuilder WithUsers(IEnumerable<IUser> users)
         {
-            Users = users?.ToList() ?? throw new ArgumentNullException(nameof(users));
+            InteractiveGuards.NotNull(users, nameof(users));
+            Users = users.ToList();
             return (TBuilder)this;
         }
 
@@ -130,7 +120,8 @@ namespace Fergun.Interactive.Pagination
         /// <returns>This builder.</returns>
         public virtual TBuilder AddUser(IUser user)
         {
-            Users.Add(user ?? throw new ArgumentNullException(nameof(user)));
+            InteractiveGuards.NotNull(user, nameof(user));
+            Users.Add(user);
             return (TBuilder)this;
         }
 
@@ -138,6 +129,7 @@ namespace Fergun.Interactive.Pagination
         /// Sets the emotes and their related paginator actions.
         /// </summary>
         /// <param name="emotes">A dictionary of emotes and paginator actions.</param>
+        /// <returns>This builder.</returns>
         public virtual TBuilder WithOptions(IDictionary<IEmote, PaginatorAction> emotes)
         {
             Options = emotes;
@@ -148,6 +140,7 @@ namespace Fergun.Interactive.Pagination
         /// Adds an emote related to a paginator action.
         /// </summary>
         /// <param name="option">The pair of emote and action.</param>
+        /// <returns>This builder.</returns>
         public virtual TBuilder AddOption(KeyValuePair<IEmote, PaginatorAction> option)
             => AddOption(option.Key, option.Value);
 
@@ -156,6 +149,7 @@ namespace Fergun.Interactive.Pagination
         /// </summary>
         /// <param name="emote">The emote.</param>
         /// <param name="action">The paginator action.</param>
+        /// <returns>This builder.</returns>
         public virtual TBuilder AddOption(IEmote emote, PaginatorAction action)
         {
             Options.Add(emote, action);
@@ -223,6 +217,7 @@ namespace Fergun.Interactive.Pagination
         /// <summary>
         /// Clears all existing emote-action pairs and adds the default emote-action pairs of the <typeparamref name="TPaginator"/>.
         /// </summary>
+        /// <returns>This builder.</returns>
         public virtual TBuilder WithDefaultEmotes()
         {
             Options.Clear();
@@ -239,12 +234,14 @@ namespace Fergun.Interactive.Pagination
         /// <summary>
         /// Sets the default canceled page.
         /// </summary>
+        /// <returns>This builder.</returns>
         public virtual TBuilder WithDefaultCanceledPage()
             => WithCanceledPage(new PageBuilder().WithColor(Color.Orange).WithTitle("Canceled! 👍"));
 
         /// <summary>
         /// Sets the default timeout page.
         /// </summary>
+        /// <returns>This builder.</returns>
         public virtual TBuilder WithDefaultTimeoutPage()
             => WithTimeoutPage(new PageBuilder().WithColor(Color.Red).WithTitle("Timed out! ⏰"));
 
