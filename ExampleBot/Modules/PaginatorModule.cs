@@ -37,8 +37,18 @@ public class PaginatorModule : ModuleBase
         // Send the paginator to the source channel and wait until it times out after 10 minutes.
         await Interactive.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10));
 
-        // Most of the time you won't need the result of the paginator so you can safely discard the task:
-        // _ = Interactive.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10));
+        // By default, SendPaginatorAsync sends the paginator and waits for a timeout or a cancellation.
+        // If you want the method to return after sending the paginator, you can set the
+        // ReturnAfterSendingPaginator option to true in the InteractiveService configuration, InteractiveConfig.
+
+        // Example in ServiceCollection:
+        /*
+        var collection = new ServiceCollection()
+            .AddSingleton<DiscordSocketClient>()
+            .AddSingleton(new InteractiveConfig { ReturnAfterSendingPaginator = true })
+            .AddSingleton<InteractiveService>()
+            ...
+        */
     }
 
     // Sends a lazy paginator. The pages are generated using a page factory.
@@ -72,10 +82,9 @@ public class PaginatorModule : ModuleBase
             .AddUser(Context.User)
             .WithPageFactory(GeneratePage)
             .WithMaxPageIndex(images.Count - 1) // You must specify the max. index the page factory can go.
-            .AddOption(new Emoji("⏪"), PaginatorAction.SkipToStart) // Use different emojis and option order.
-            .AddOption(new Emoji("◀"), PaginatorAction.Backward)
+            .AddOption(new Emoji("◀"), PaginatorAction.Backward) // Use different emojis and option order.
             .AddOption(new Emoji("▶"), PaginatorAction.Forward)
-            .AddOption(new Emoji("⏩"), PaginatorAction.SkipToEnd)
+            .AddOption(new Emoji("🔢"), PaginatorAction.Jump) // Use the jump feature
             .AddOption(new Emoji("🛑"), PaginatorAction.Exit)
             .WithCacheLoadedPages(false) // The lazy paginator caches generated pages by default but it's possible to disable this.
             .WithActionOnCancellation(ActionOnStop.DeleteMessage) // Delete the message after pressing the stop emoji.
