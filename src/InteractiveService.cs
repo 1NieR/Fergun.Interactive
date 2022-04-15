@@ -522,7 +522,7 @@ public class InteractiveService
     /// <exception cref="ArgumentException"/>
     /// <exception cref="ArgumentNullException"/>
     /// <exception cref="NotSupportedException"/>
-    public async Task<InteractiveMessageResult> SendPaginatorAsync(Paginator paginator, SocketInteraction interaction, TimeSpan? timeout = null,
+    public async Task<InteractiveMessageResult> SendPaginatorAsync(Paginator paginator, IDiscordInteraction interaction, TimeSpan? timeout = null,
         InteractionResponseType responseType = InteractionResponseType.ChannelMessageWithSource, bool ephemeral = false,
         Action<IUserMessage>? messageAction = null, bool resetTimeoutOnInput = false, CancellationToken cancellationToken = default)
     {
@@ -547,10 +547,23 @@ public class InteractiveService
         var timeoutTaskSource = new TimeoutTaskCompletionSource<InteractiveStatus>(timeout ?? _config.DefaultTimeout,
             resetTimeoutOnInput, InteractiveStatus.Timeout, InteractiveStatus.Canceled, cancellationToken);
 
-        var initialInteraction = responseType is InteractionResponseType.DeferredUpdateMessage or InteractionResponseType.UpdateMessage ? interaction : null;
-        using var callback = new PaginatorCallback(paginator, message, timeoutTaskSource, DateTimeOffset.UtcNow, initialInteraction);
+        if (_config.ReturnAfterSendingPaginator)
+        {
+            _ = WaitForPaginatorResultUsingCallbackAsync().ConfigureAwait(false);
 
-        return await WaitForPaginatorResultAsync(callback).ConfigureAwait(false);
+            return new InteractiveMessageResultBuilder()
+                .WithMessage(message)
+                .Build();
+        }
+
+        return await WaitForPaginatorResultUsingCallbackAsync().ConfigureAwait(false);
+
+        async Task<InteractiveMessageResult> WaitForPaginatorResultUsingCallbackAsync()
+        {
+            var initialInteraction = responseType is InteractionResponseType.DeferredUpdateMessage or InteractionResponseType.UpdateMessage ? interaction : null;
+            using var callback = new PaginatorCallback(paginator, message, timeoutTaskSource, DateTimeOffset.UtcNow, initialInteraction);
+            return await WaitForPaginatorResultAsync(callback).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -622,7 +635,7 @@ public class InteractiveService
     /// <exception cref="ArgumentException"/>
     /// <exception cref="ArgumentNullException"/>
     /// <exception cref="NotSupportedException"/>
-    public async Task<InteractiveMessageResult<TOption?>> SendSelectionAsync<TOption>(BaseSelection<TOption> selection, SocketInteraction interaction,
+    public async Task<InteractiveMessageResult<TOption?>> SendSelectionAsync<TOption>(BaseSelection<TOption> selection, IDiscordInteraction interaction,
         TimeSpan? timeout = null, InteractionResponseType responseType = InteractionResponseType.ChannelMessageWithSource, bool ephemeral = false,
         Action<IUserMessage>? messageAction = null, CancellationToken cancellationToken = default)
     {
@@ -842,18 +855,19 @@ public class InteractiveService
                 x.Content = page.Text;
                 x.Embeds = page.GetEmbedArray();
                 x.Components = component;
+                x.AllowedMentions = page.AllowedMentions;
             }).ConfigureAwait(false);
         }
         else
         {
             InteractiveGuards.NotNull(channel);
-            message = await channel!.SendMessageAsync(page.Text, embeds: page.GetEmbedArray(), components: component).ConfigureAwait(false);
+            message = await channel!.SendMessageAsync(page.Text, page.IsTTS, null, null, page.AllowedMentions, page.MessageReference, component, page.Stickers.ToArray(), page.GetEmbedArray()).ConfigureAwait(false);
         }
 
         return message;
     }
 
-    private static async Task<IUserMessage> SendOrModifyMessageAsync<TOption>(IInteractiveElement<TOption> element, SocketInteraction interaction,
+    private static async Task<IUserMessage> SendOrModifyMessageAsync<TOption>(IInteractiveElement<TOption> element, IDiscordInteraction interaction,
         InteractionResponseType responseType, bool ephemeral)
     {
         var page = await element.GetCurrentPageAsync().ConfigureAwait(false);
@@ -870,11 +884,11 @@ public class InteractiveService
         switch (responseType)
         {
             case InteractionResponseType.ChannelMessageWithSource:
-                await interaction.RespondAsync(page.Text, embeds, ephemeral: ephemeral, components: component).ConfigureAwait(false);
+                await interaction.RespondAsync(page.Text, embeds, page.IsTTS, ephemeral, page.AllowedMentions, component).ConfigureAwait(false);
                 return await interaction.GetOriginalResponseAsync().ConfigureAwait(false);
 
             case InteractionResponseType.DeferredChannelMessageWithSource:
-                return await interaction.FollowupAsync(page.Text, embeds, ephemeral: ephemeral, components: component).ConfigureAwait(false);
+                return await interaction.FollowupAsync(page.Text, embeds, page.IsTTS, ephemeral, page.AllowedMentions, component).ConfigureAwait(false);
 
             case InteractionResponseType.DeferredUpdateMessage:
                 InteractiveGuards.ValidResponseType(responseType, interaction);
@@ -882,7 +896,7 @@ public class InteractiveService
 
             case InteractionResponseType.UpdateMessage:
                 InteractiveGuards.ValidResponseType(responseType, interaction);
-                await ((SocketMessageComponent)interaction).UpdateAsync(UpdateMessage).ConfigureAwait(false);
+                await ((IComponentInteraction)interaction).UpdateAsync(UpdateMessage).ConfigureAwait(false);
                 return await interaction.GetOriginalResponseAsync().ConfigureAwait(false);
 
             default:
@@ -894,11 +908,12 @@ public class InteractiveService
             props.Content = page.Text;
             props.Embeds = embeds;
             props.Components = component;
+            props.AllowedMentions = page.AllowedMentions;
         }
     }
 
     private static async Task ApplyActionOnStopAsync<TOption>(IInteractiveElement<TOption> element, IInteractiveMessageResult result,
-        SocketInteraction? lastInteraction, SocketMessageComponent? stopInteraction, bool deferInteraction)
+        IDiscordInteraction? lastInteraction, SocketMessageComponent? stopInteraction, bool deferInteraction)
     {
         bool ephemeral = result.Message.Flags.GetValueOrDefault().HasFlag(MessageFlags.Ephemeral);
 
@@ -980,7 +995,7 @@ public class InteractiveService
                     // An interaction to stop the element has been received
                     await stopInteraction.UpdateAsync(UpdateMessage).ConfigureAwait(false);
                 }
-                else if (lastInteraction?.IsValidToken == true)
+                else if (lastInteraction is not null && (DateTimeOffset.UtcNow - lastInteraction.CreatedAt).TotalMinutes <= 15.0)
                 {
                     // The element is from a message that was updated using an interaction, and its token is still valid
                     await lastInteraction.ModifyOriginalResponseAsync(UpdateMessage).ConfigureAwait(false);
@@ -1018,6 +1033,7 @@ public class InteractiveService
             props.Content = page?.Text ?? new Optional<string>();
             props.Embeds = page?.GetEmbedArray() ?? new Optional<Embed[]>();
             props.Components = components ?? new Optional<MessageComponent>();
+            props.AllowedMentions = page?.AllowedMentions ?? new Optional<AllowedMentions>();
         }
     }
 
