@@ -502,12 +502,8 @@ public class InteractiveService
     /// <param name="responseType">The response type. When using the "Deferred" response types, you must pass an interaction that has already been deferred.</param>
     /// <param name="ephemeral">
     /// Whether the response message should be ephemeral. Ignored if modifying a non-ephemeral message.<br/><br/>
-    /// Ephemeral paginators have several limitations:<br/>
-    /// - <see cref="ActionOnStop.DeleteMessage"/> won't work (they cannot be deleted through the API).<br/>
-    /// - <see cref="InputType.Reactions"/> won't work (they can't have reactions).<br/><br/>
-    /// Ephemeral paginators require an interaction to be modified, which causes the following problems:<br/>
-    /// - <see cref="BaseSelection{TOption}.ActionOnTimeout"/> will only work if a least one interaction for changing the page has been received in the last 15 minutes.<br/>
-    /// - <see cref="BaseSelection{TOption}.ActionOnCancellation"/> won't work if the selection is cancelled using a <paramref name="cancellationToken"/>, unless the requisites above are satisfied.<br/>
+    /// Ephemeral paginators have the following limitations:<br/>
+    /// - <see cref="InputType.Reactions"/> won't work (they can't have reactions).
     /// </param>
     /// <param name="messageAction">A method that gets executed once when a message containing the paginator is sent or modified.</param>
     /// <param name="resetTimeoutOnInput">Whether to reset the internal timeout timer when a valid input is received.</param>
@@ -537,7 +533,7 @@ public class InteractiveService
         var message = await SendOrModifyMessageAsync(paginator, interaction, responseType, ephemeral).ConfigureAwait(false);
         messageAction?.Invoke(message);
 
-        if (paginator.MaxPageIndex == 0)
+        if (!_config.ProcessSinglePagePaginators && paginator.MaxPageIndex == 0)
         {
             return new InteractiveMessageResultBuilder()
                 .WithMessage(message)
@@ -560,8 +556,7 @@ public class InteractiveService
 
         async Task<InteractiveMessageResult> WaitForPaginatorResultUsingCallbackAsync()
         {
-            var initialInteraction = responseType is InteractionResponseType.DeferredUpdateMessage or InteractionResponseType.UpdateMessage ? interaction : null;
-            using var callback = new PaginatorCallback(paginator, message, timeoutTaskSource, DateTimeOffset.UtcNow, initialInteraction);
+            using var callback = new PaginatorCallback(paginator, message, timeoutTaskSource, DateTimeOffset.UtcNow, interaction);
             return await WaitForPaginatorResultAsync(callback).ConfigureAwait(false);
         }
     }
@@ -618,12 +613,8 @@ public class InteractiveService
     /// <param name="responseType">The response type. When using the "Deferred" response types, you must pass an interaction that has already been deferred.</param>
     /// <param name="ephemeral">
     /// Whether the response message should be ephemeral. Ignored if modifying a non-ephemeral message.<br/><br/>
-    /// Ephemeral selections have several limitations:<br/>
-    /// - <see cref="ActionOnStop.DeleteMessage"/> won't work (they cannot be deleted via through the API).<br/>
-    /// - <see cref="InputType.Reactions"/> won't work (they can't have reactions).<br/><br/>
-    /// Ephemeral selections require an interaction to be modified, which causes the following problems:<br/>
-    /// - <see cref="BaseSelection{TOption}.ActionOnTimeout"/> won't work.<br/>
-    /// - <see cref="BaseSelection{TOption}.ActionOnCancellation"/> won't work if the selection is cancelled using a <paramref name="cancellationToken"/>.<br/>
+    /// Ephemeral selections have the following limitations:<br/>
+    /// - <see cref="InputType.Reactions"/> won't work (they can't have reactions).
     /// </param>
     /// <param name="messageAction">A method that gets executed once when a message containing the selection is sent or modified.</param>
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to cancel the selection.</param>
@@ -654,8 +645,7 @@ public class InteractiveService
         var timeoutTaskSource = new TimeoutTaskCompletionSource<(TOption?, InteractiveStatus)>(timeout ?? _config.DefaultTimeout,
             false, (default, InteractiveStatus.Timeout), (default, InteractiveStatus.Canceled), cancellationToken);
 
-        var initialInteraction = responseType is InteractionResponseType.DeferredUpdateMessage or InteractionResponseType.UpdateMessage ? interaction : null;
-        using var callback = new SelectionCallback<TOption>(selection, message, timeoutTaskSource, DateTimeOffset.UtcNow, initialInteraction);
+        using var callback = new SelectionCallback<TOption>(selection, message, timeoutTaskSource, DateTimeOffset.UtcNow, interaction);
 
         return await WaitForSelectionResultAsync(callback).ConfigureAwait(false);
     }
@@ -673,7 +663,7 @@ public class InteractiveService
         message = await SendOrModifyMessageAsync(paginator, message, channel).ConfigureAwait(false);
         messageAction?.Invoke(message);
 
-        if (paginator.MaxPageIndex == 0)
+        if (!_config.ProcessSinglePagePaginators && paginator.MaxPageIndex == 0)
         {
             return new InteractiveMessageResultBuilder()
                 .WithMessage(message)
@@ -836,17 +826,18 @@ public class InteractiveService
         return result;
     }
 
-    private static async Task<IUserMessage> SendOrModifyMessageAsync<TOption>(IInteractiveElement<TOption> element,
-        IUserMessage? message, IMessageChannel? channel)
+    private async Task<IUserMessage> SendOrModifyMessageAsync<TOption>(IInteractiveElement<TOption> element, IUserMessage? message, IMessageChannel? channel)
     {
         var page = await element.GetCurrentPageAsync().ConfigureAwait(false);
 
         MessageComponent? component = null;
-        bool moreThanOnePage = element is not Paginator pag || pag.MaxPageIndex > 0;
-        if ((element.InputType.HasFlag(InputType.Buttons) || element.InputType.HasFlag(InputType.SelectMenus)) && moreThanOnePage)
+        bool addComponents = element is not Paginator pag || _config.ProcessSinglePagePaginators || pag.MaxPageIndex > 0;
+        if ((element.InputType.HasFlag(InputType.Buttons) || element.InputType.HasFlag(InputType.SelectMenus)) && addComponents)
         {
             component = element.GetOrAddComponents(false).Build();
         }
+
+        var attachments = page.AttachmentsFactory is null ? null : await page.AttachmentsFactory().ConfigureAwait(false);
 
         if (message is not null)
         {
@@ -856,42 +847,47 @@ public class InteractiveService
                 x.Embeds = page.GetEmbedArray();
                 x.Components = component;
                 x.AllowedMentions = page.AllowedMentions;
+                x.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
             }).ConfigureAwait(false);
         }
         else
         {
             InteractiveGuards.NotNull(channel);
-            message = await channel!.SendMessageAsync(page.Text, page.IsTTS, null, null, page.AllowedMentions, page.MessageReference, component, page.Stickers.ToArray(), page.GetEmbedArray()).ConfigureAwait(false);
+            message = await channel!.SendFilesAsync(attachments ?? Enumerable.Empty<FileAttachment>(), page.Text, page.IsTTS, null, null,
+                page.AllowedMentions, page.MessageReference, component, page.Stickers.ToArray(), page.GetEmbedArray()).ConfigureAwait(false);
         }
 
         return message;
     }
 
-    private static async Task<IUserMessage> SendOrModifyMessageAsync<TOption>(IInteractiveElement<TOption> element, IDiscordInteraction interaction,
+    private async Task<IUserMessage> SendOrModifyMessageAsync<TOption>(IInteractiveElement<TOption> element, IDiscordInteraction interaction,
         InteractionResponseType responseType, bool ephemeral)
     {
         var page = await element.GetCurrentPageAsync().ConfigureAwait(false);
 
         MessageComponent? component = null;
-        bool moreThanOnePage = element is not Paginator pag || pag.MaxPageIndex > 0;
-        if ((element.InputType.HasFlag(InputType.Buttons) || element.InputType.HasFlag(InputType.SelectMenus)) && moreThanOnePage)
+        bool addComponents = element is not Paginator pag || _config.ProcessSinglePagePaginators || pag.MaxPageIndex > 0;
+        if ((element.InputType.HasFlag(InputType.Buttons) || element.InputType.HasFlag(InputType.SelectMenus)) && addComponents)
         {
             component = element.GetOrAddComponents(false).Build();
         }
 
         var embeds = page.GetEmbedArray();
+        var attachments = page.AttachmentsFactory is null ? null : await page.AttachmentsFactory().ConfigureAwait(false);
 
         switch (responseType)
         {
             case InteractionResponseType.ChannelMessageWithSource:
-                await interaction.RespondAsync(page.Text, embeds, page.IsTTS, ephemeral, page.AllowedMentions, component).ConfigureAwait(false);
+                await interaction.RespondWithFilesAsync(attachments ?? Enumerable.Empty<FileAttachment>(),
+                    page.Text, embeds, page.IsTTS, ephemeral, page.AllowedMentions, component).ConfigureAwait(false);
                 return await interaction.GetOriginalResponseAsync().ConfigureAwait(false);
 
             case InteractionResponseType.DeferredChannelMessageWithSource:
-                return await interaction.FollowupAsync(page.Text, embeds, page.IsTTS, ephemeral, page.AllowedMentions, component).ConfigureAwait(false);
+                return await interaction.FollowupWithFilesAsync(attachments ?? Enumerable.Empty<FileAttachment>(),
+                    page.Text, embeds, page.IsTTS, ephemeral, page.AllowedMentions, component).ConfigureAwait(false);
 
             case InteractionResponseType.DeferredUpdateMessage:
-                //InteractiveGuards.ValidResponseType(responseType, interaction);
+                InteractiveGuards.ValidResponseType(responseType, interaction);
                 return await interaction.ModifyOriginalResponseAsync(UpdateMessage).ConfigureAwait(false);
 
             case InteractionResponseType.UpdateMessage:
@@ -909,6 +905,7 @@ public class InteractiveService
             props.Embeds = embeds;
             props.Components = component;
             props.AllowedMentions = page.AllowedMentions;
+            props.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
         }
     }
 
@@ -938,28 +935,30 @@ public class InteractiveService
 
         if (action.HasFlag(ActionOnStop.DeleteMessage))
         {
-            // Ephemeral messages cannot be deleted through the API
-            // https://github.com/discord/discord-api-docs/discussions/3806
-            if (!ephemeral)
+            try
             {
-                try
+                if (lastInteraction is not null && (DateTimeOffset.UtcNow - lastInteraction.CreatedAt).TotalMinutes <= 15.0)
+                {
+                    await lastInteraction.DeleteOriginalResponseAsync().ConfigureAwait(false);
+                }
+                else if (!ephemeral)
                 {
                     await result.Message.DeleteAsync().ConfigureAwait(false);
                 }
-                catch (HttpException e) when (e.HttpCode == HttpStatusCode.NotFound)
+                else if (deferInteraction && stopInteraction is not null)
                 {
-                    // We want to delete the message so we don't care if the message has been already deleted.
+                    await stopInteraction.DeferAsync().ConfigureAwait(false);
                 }
             }
-            else if (deferInteraction && stopInteraction is not null)
+            catch (HttpException e) when (e.HttpCode == HttpStatusCode.NotFound)
             {
-                await stopInteraction.DeferAsync().ConfigureAwait(false);
+                // We want to delete the message so we don't care if the message has been already deleted.
             }
-
             return;
         }
 
         IPage? page = null;
+        IEnumerable<FileAttachment>? attachments = null;
         if (action.HasFlag(ActionOnStop.ModifyMessage))
         {
             page = result.Status switch
@@ -969,6 +968,8 @@ public class InteractiveService
                 InteractiveStatus.Success when element is BaseSelection<TOption> selection => selection.SuccessPage,
                 _ => throw new ArgumentException("Unknown action.", nameof(result))
             };
+
+            attachments = page?.AttachmentsFactory is null ? null : await page.AttachmentsFactory().ConfigureAwait(false);
         }
 
         MessageComponent? components = null;
@@ -984,7 +985,7 @@ public class InteractiveService
             }
         }
 
-        bool modifyMessage = page?.Text is not null || page?.Embeds.Count > 0 || components is not null;
+        bool modifyMessage = page?.Text is not null || page?.Embeds.Count > 0 || components is not null || attachments is not null;
 
         if (modifyMessage)
         {
@@ -1034,6 +1035,7 @@ public class InteractiveService
             props.Embeds = page?.GetEmbedArray() ?? new Optional<Embed[]>();
             props.Components = components ?? new Optional<MessageComponent>();
             props.AllowedMentions = page?.AllowedMentions ?? new Optional<AllowedMentions>();
+            props.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
         }
     }
 

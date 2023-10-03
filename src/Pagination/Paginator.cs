@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,11 +30,18 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
         InteractiveGuards.NotNull(properties);
         InteractiveGuards.NotNull(properties.Users);
         InteractiveGuards.NotNull(properties.Options);
-        InteractiveGuards.NotEmpty(properties.Options);
+        InteractiveGuards.NotNull(properties.ButtonFactories);
+        InteractiveGuards.NotEmpty(properties.ButtonFactories);
         InteractiveGuards.SupportedInputType(properties.InputType, false);
+
+        if (properties.InputType.HasFlag(InputType.Reactions))
+        {
+            InteractiveGuards.NotEmpty(properties.Options);
+        }
 
         Users = properties.Users.ToArray();
         Emotes = properties.Options.AsReadOnly();
+        ButtonFactories = new ReadOnlyCollection<Func<IButtonContext, IPaginatorButton>>(properties.ButtonFactories);
         CanceledPage = properties.CanceledPage?.Build();
         TimeoutPage = properties.TimeoutPage?.Build();
         Deletion = properties.Deletion;
@@ -76,6 +84,12 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// Gets the emotes and their related actions of this paginator.
     /// </summary>
     public IReadOnlyDictionary<IEmote, PaginatorAction> Emotes { get; }
+
+    /// <summary>
+    /// Gets the button factories.
+    /// </summary>
+    /// <remarks>This property is only used when <see cref="InputType"/> contains <see cref="Fergun.Interactive.InputType.Buttons"/>.</remarks>
+    public IReadOnlyList<Func<IButtonContext, IPaginatorButton>> ButtonFactories { get; }
 
     /// <inheritdoc/>
     public IPage? CanceledPage { get; }
@@ -305,7 +319,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
                 // We don't know if the user is viewing the modal or they just dismissed it, the former is assumed
                 if (!string.IsNullOrEmpty(JumpInputInUseMessage))
                 {
-                    await interaction.RespondAsync(JumpInputInUseMessage, ephemeral: true);
+                    await interaction.RespondAsync(JumpInputInUseMessage, ephemeral: true).ConfigureAwait(false);
                 }
                 else
                 {
@@ -365,22 +379,32 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     public virtual ComponentBuilder GetOrAddComponents(bool disableAll, ComponentBuilder? builder = null)
     {
         builder ??= new ComponentBuilder();
-        foreach (var pair in Emotes)
+        for (int i = 0; i < ButtonFactories.Count; i++)
         {
-            bool isDisabled = disableAll || pair.Value switch
-            {
-                PaginatorAction.SkipToStart => CurrentPageIndex == 0,
-                PaginatorAction.Backward => CurrentPageIndex == 0,
-                PaginatorAction.Forward => CurrentPageIndex == MaxPageIndex,
-                PaginatorAction.SkipToEnd => CurrentPageIndex == MaxPageIndex,
-                _ => false
-            };
+            var context = new ButtonContext(i, CurrentPageIndex, MaxPageIndex, disableAll);
+            var properties = ButtonFactories[i].Invoke(context);
 
-            var button = new ButtonBuilder()
-                .WithCustomId(pair.Key.ToString())
-                .WithStyle(pair.Value == PaginatorAction.Exit ? ButtonStyle.Secondary : ButtonStyle.Secondary)
-                .WithEmote(pair.Key)
-                .WithDisabled(isDisabled);
+            if (properties is null || properties.IsHidden)
+                continue;
+
+            var style = properties.Style ?? (properties.Action == PaginatorAction.Exit ? ButtonStyle.Danger : ButtonStyle.Primary);
+            var button = new ButtonBuilder();
+
+            if (style == ButtonStyle.Link)
+            {
+                button.WithUrl(properties.Url);
+            }
+            else
+            {
+                button.WithCustomId(string.IsNullOrEmpty(properties.CustomId) ? $"{i}_{(int)properties.Action}" : properties.CustomId);
+            }
+
+            button.WithStyle(style)
+                .WithEmote(properties.Emote)
+                .WithDisabled(properties.IsDisabled ?? context.ShouldDisable(properties.Action));
+
+            if (!string.IsNullOrEmpty(properties.Text))
+                button.WithLabel(properties.Text);
 
             builder.WithButton(button);
         }
@@ -449,11 +473,14 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
         if (action == PaginatorAction.Jump && await JumpToPageAsync(input).ConfigureAwait(false))
         {
             var currentPage = await GetOrLoadCurrentPageAsync().ConfigureAwait(false);
+            var attachments = currentPage.AttachmentsFactory is null ? null : await currentPage.AttachmentsFactory().ConfigureAwait(false);
+
             await message.ModifyAsync(x =>
             {
                 x.Embeds = currentPage.GetEmbedArray();
                 x.Content = currentPage.Text;
                 x.AllowedMentions = currentPage.AllowedMentions;
+                x.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
             }).ConfigureAwait(false);
         }
 
@@ -461,11 +488,14 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
         if (refreshPage)
         {
             var currentPage = await GetOrLoadCurrentPageAsync().ConfigureAwait(false);
+            var attachments = currentPage.AttachmentsFactory is null ? null : await currentPage.AttachmentsFactory().ConfigureAwait(false);
+
             await message.ModifyAsync(x =>
             {
                 x.Embeds = currentPage.GetEmbedArray();
                 x.Content = currentPage.Text;
                 x.AllowedMentions = currentPage.AllowedMentions;
+                x.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
             }).ConfigureAwait(false);
         }
 
@@ -488,16 +518,22 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
             return new(InteractiveInputStatus.Ignored);
         }
 
-        var emote = (input
-                .Message
-                .Components
-                .SelectMany(x => x.Components)
-                .FirstOrDefault(x => x is ButtonComponent button && button.CustomId == input.Data.CustomId) as ButtonComponent)?
-            .Emote;
-
-        if (emote is null || !Emotes.TryGetValue(emote, out var action))
+        // Get last character of custom Id, convert it to a number and cast it to PaginatorAction
+        var action = (PaginatorAction)(input.Data.CustomId?[^1] - '0' ?? -1);
+        if (!Enum.IsDefined(typeof(PaginatorAction), action))
         {
-            return InteractiveInputStatus.Ignored;
+            // Old way to get the action for backward compatibility
+            var emote = (input
+                    .Message
+                    .Components
+                    .SelectMany(x => x.Components)
+                    .FirstOrDefault(x => x is ButtonComponent button && button.CustomId == input.Data.CustomId) as ButtonComponent)?
+                .Emote;
+
+            if (emote is null || !Emotes.TryGetValue(emote, out action))
+            {
+                return InteractiveInputStatus.Ignored;
+            }
         }
 
         if (action == PaginatorAction.Exit)
@@ -508,6 +544,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
         if (action == PaginatorAction.Jump && await JumpToPageAsync(input).ConfigureAwait(false))
         {
             var currentPage = await GetOrLoadCurrentPageAsync().ConfigureAwait(false);
+            var attachments = currentPage.AttachmentsFactory is null ? null : await currentPage.AttachmentsFactory().ConfigureAwait(false);
             var buttons = GetOrAddComponents(false).Build();
 
             await input.ModifyOriginalResponseAsync(x =>
@@ -516,6 +553,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
                 x.Embeds = currentPage.GetEmbedArray();
                 x.Components = buttons;
                 x.AllowedMentions = currentPage.AllowedMentions;
+                x.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
             }).ConfigureAwait(false);
         }
 
@@ -523,6 +561,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
         if (refreshPage)
         {
             var currentPage = await GetOrLoadCurrentPageAsync().ConfigureAwait(false);
+            var attachments = currentPage.AttachmentsFactory is null ? null : await currentPage.AttachmentsFactory().ConfigureAwait(false);
             var buttons = GetOrAddComponents(false).Build();
 
             await input.UpdateAsync(x =>
@@ -531,6 +570,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
                 x.Embeds = currentPage.GetEmbedArray();
                 x.Components = buttons;
                 x.AllowedMentions = currentPage.AllowedMentions;
+                x.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
             }).ConfigureAwait(false);
         }
 
@@ -558,7 +598,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
         {
             if (!string.IsNullOrEmpty(ExpiredJumpInputMessage))
             {
-                await input.RespondAsync(ExpiredJumpInputMessage, ephemeral: true);
+                await input.RespondAsync(ExpiredJumpInputMessage, ephemeral: true).ConfigureAwait(false);
             }
             else
             {

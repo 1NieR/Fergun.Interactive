@@ -14,8 +14,12 @@ namespace ExampleBot.Modules;
 public class PaginatorModule : ModuleBase
 {
     private static readonly GoogleScraper _scraper = new();
+    private readonly InteractiveService _interactive;
 
-    public InteractiveService Interactive { get; set; }
+    public PaginatorModule(InteractiveService interactive)
+    {
+        _interactive = interactive;
+    }
 
     // Sends a message that contains a static paginator with pages that can be changed with reactions or buttons.
     [Command("static", RunMode = RunMode.Async)]
@@ -35,7 +39,7 @@ public class PaginatorModule : ModuleBase
             .Build();
 
         // Send the paginator to the source channel and wait until it times out after 10 minutes.
-        await Interactive.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10));
+        await _interactive.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10));
 
         // By default, SendPaginatorAsync sends the paginator and waits for a timeout or a cancellation.
         // If you want the method to return after sending the paginator, you can set the
@@ -61,7 +65,7 @@ public class PaginatorModule : ModuleBase
             .WithMaxPageIndex(9) // You must specify the max. index the page factory can go. max. index 9 = 10 pages
             .Build();
 
-        await Interactive.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10));
+        await _interactive.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10));
 
         static PageBuilder GeneratePage(int index)
         {
@@ -71,7 +75,7 @@ public class PaginatorModule : ModuleBase
         }
     }
 
-    // Sends a lazy paginator that displays images and uses more options.
+    // Sends a lazy paginator that displays images and uses more complex buttons.
     [Command("img", RunMode = RunMode.Async)]
     public async Task ImgAsync(string query = "discord")
     {
@@ -82,17 +86,23 @@ public class PaginatorModule : ModuleBase
             .AddUser(Context.User)
             .WithPageFactory(GeneratePage)
             .WithMaxPageIndex(images.Count - 1) // You must specify the max. index the page factory can go.
-            .AddOption(new Emoji("◀"), PaginatorAction.Backward) // Use different emojis and option order.
-            .AddOption(new Emoji("▶"), PaginatorAction.Forward)
-            .AddOption(new Emoji("🔢"), PaginatorAction.Jump) // Use the jump feature
-            .AddOption(new Emoji("🛑"), PaginatorAction.Exit)
+            .AddOption(context =>
+            {
+                // Factory method that creates a disabled blurple button with text "Page x / y"
+                return new PaginatorButton(PaginatorAction.Backward, null,
+                    $"Page {context.CurrentPageIndex + 1} / {context.MaxPageIndex + 1}", ButtonStyle.Primary, true);
+            })
+            .AddOption(new Emoji("◀"), PaginatorAction.Backward, ButtonStyle.Secondary) // Gray buttons
+            .AddOption(new Emoji("❌"), PaginatorAction.Exit, ButtonStyle.Secondary)
+            .AddOption(new Emoji("▶"), PaginatorAction.Forward, ButtonStyle.Secondary)
+            .AddOption(new Emoji("🔢"), PaginatorAction.Jump, ButtonStyle.Secondary) // Use the jump feature
             .WithCacheLoadedPages(false) // The lazy paginator caches generated pages by default but it's possible to disable this.
             .WithActionOnCancellation(ActionOnStop.DeleteMessage) // Delete the message after pressing the stop emoji.
             .WithActionOnTimeout(ActionOnStop.DisableInput) // Disable the input (buttons) after a timeout.
             .WithFooter(PaginatorFooter.None) // Do not override the page footer. This allows us to write our own page footer in the page factory.
             .Build();
 
-        await Interactive.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10));
+        await _interactive.SendPaginatorAsync(paginator, Context.Channel, TimeSpan.FromMinutes(10));
 
         PageBuilder GeneratePage(int index)
         {
@@ -102,7 +112,6 @@ public class PaginatorModule : ModuleBase
                 .WithUrl(images[index].SourceUrl)
                 .WithDescription("Image paginator example")
                 .WithImageUrl(images[index].Url)
-                .WithFooter($"Page {index + 1}/{images.Count}")
                 .WithRandomColor();
         }
     }

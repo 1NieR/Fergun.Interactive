@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Discord;
 
 namespace Fergun.Interactive;
@@ -21,9 +22,10 @@ public class Page : IPage
         AllowedMentions = page.AllowedMentions;
         MessageReference = page.MessageReference;
         Stickers = page.Stickers;
-
+        AttachmentsFactory = page.AttachmentsFactory;
+        
         bool isEmpty = false;
-        var builder = page._builder;
+        var builder = page.GetEmbedBuilder();
 
         if (builder?.Author is null &&
             builder?.Color is null &&
@@ -36,9 +38,9 @@ public class Page : IPage
             builder?.Title is null &&
             builder?.Url is null)
         {
-            if (string.IsNullOrEmpty(page.Text))
+            if (string.IsNullOrEmpty(page.Text) && AttachmentsFactory is null)
             {
-                throw new InvalidOperationException("Either a text or a valid EmbedBuilder must be present.");
+                throw new InvalidOperationException("Either a text, a valid EmbedBuilder or an AttachmentsFactory must be present.");
             }
 
             isEmpty = true;
@@ -62,6 +64,9 @@ public class Page : IPage
 
     /// <inheritdoc/>
     public IReadOnlyCollection<ISticker> Stickers { get; }
+
+    /// <inheritdoc/>
+    public Func<ValueTask<IEnumerable<FileAttachment>?>>? AttachmentsFactory { get; }
 
     /// <summary>
     /// Gets the embed of this page.

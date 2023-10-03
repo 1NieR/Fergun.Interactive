@@ -178,7 +178,7 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
 
                 var button = new ButtonBuilder()
                     .WithCustomId(emote?.ToString() ?? label)
-                    .WithStyle(ButtonStyle.Secondary)
+                    .WithStyle(ButtonStyle.Primary)
                     .WithEmote(emote)
                     .WithDisabled(disableAll);
 

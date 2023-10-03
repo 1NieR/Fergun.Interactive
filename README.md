@@ -11,7 +11,7 @@ This is a fork of [Discord.InteractivityAddon](https://github.com/Playwo/Discord
 - Methods for receiving incoming messages/reactions/interactions
 - Fully customizable paginator
   - Uses pages that can be changed through reactions or buttons
-  - Uses a dictionary of emotes and paginator actions that can be modified
+  - Support for customization of buttons (emote, label, style, etc.)
   - 2 included types of paginators: static and lazy loaded
   - Support for restricting use to certain users
   - Supports a canceled and timeout page
@@ -19,6 +19,7 @@ This is a fork of [Discord.InteractivityAddon](https://github.com/Playwo/Discord
   - Support for actions that are executed when a paginator stops like modify/delete the message and/or remove/disable the reactions/components
   - Support for extension methods that can be used in any paginator builder
   - Support for custom paginators, inheriting from the `Paginator` and `PaginatorBuilder` classes
+  - Jump (skip) to a specific page using a message input or modals (more info [here](https://github.com/d4n3436/Fergun.Interactive/releases/tag/v1.5))
 - Fully customizable selection
   - Uses a list of options to select from
   - Supports messages, reactions, buttons and select menus
@@ -51,25 +52,25 @@ The [Example Bot](ExampleBot) contains multiple examples with comments. The defa
 
 Example modules:
 - Waiting for socket entities (messages, reactions, etc.)
-  - [Wait for a message](ExampleBot/Modules/WaitModule.cs#L15) (`!next message`)
-  - [Wait for a reaction](ExampleBot/Modules/WaitModule.cs#L26) (`!next reaction`)
-  - [Wait for an interaction](ExampleBot/Modules/WaitModule.cs#L42) (`!next interaction`)
+  - [Wait for a message](ExampleBot/Modules/WaitModule.cs#L20) (`!next message`)
+  - [Wait for a reaction](ExampleBot/Modules/WaitModule.cs#L31) (`!next reaction`)
+  - [Wait for an interaction](ExampleBot/Modules/WaitModule.cs#L47) (`!next interaction`)
 
 - Selection
-  - [Simple selection](ExampleBot/Modules/SelectionModule.cs#L23) (`!select simple`)
-  - [Emote selection](ExampleBot/Modules/SelectionModule.cs#L63) (`!select emote`) (for selections using reactions/buttons as input)
-  - [Emote selection 2](ExampleBot/Modules/SelectionModule.cs#L97) (`!select emote2`)
-  - [Selection with extra features](ExampleBot/Modules/SelectionModule.cs#L134) (`!select extra`)
-  - [Menu](ExampleBot/Modules/SelectionModule.cs#L188) (`!select menu`) (How to reuse a selection message)
+  - [Simple selection](ExampleBot/Modules/SelectionModule.cs#L28) (`!select simple`)
+  - [Emote selection](ExampleBot/Modules/SelectionModule.cs#L68) (`!select emote`) (for selections using reactions/buttons as input)
+  - [Emote selection 2](ExampleBot/Modules/SelectionModule.cs#L102) (`!select emote2`)
+  - [Selection with extra features](ExampleBot/Modules/SelectionModule.cs#L139) (`!select extra`)
+  - [Menu](ExampleBot/Modules/SelectionModule.cs#L193) (`!select menu`) (How to reuse a selection message)
 
 - Pagination
-  - [Static paginator](ExampleBot/Modules/PaginatorModule.cs#L22) (`!paginator static`)
-  - [Lazy paginator](ExampleBot/Modules/PaginatorModule.cs#L46) (`!paginator lazy`)
-  - [Image paginator](ExampleBot/Modules/PaginatorModule.cs#L66) (`!paginator img [query]`)
+  - [Static paginator](ExampleBot/Modules/PaginatorModule.cs#L26) (`!paginator static`)
+  - [Lazy paginator](ExampleBot/Modules/PaginatorModule.cs#L60) (`!paginator lazy`)
+  - [Image paginator](ExampleBot/Modules/PaginatorModule.cs#L80) (`!paginator img [query]`)
 
 - Customization
-  - [Selection with custom button colors](ExampleBot/Modules/CustomButtonModule.cs#L18) (`!custom button`)
-  - [Multi selection](ExampleBot/Modules/CustomSelectModule.cs#L19) (`!custom select`) (Selection message with multiple select menus)
+  - [Selection with custom button colors](ExampleBot/Modules/CustomButtonModule.cs#L16) (`!custom button`)
+  - [Multi selection](ExampleBot/Modules/CustomSelectModule.cs#L26) (`!custom select`) (Selection message with multiple select menus)
   - [Extension methods in builders](ExampleBot/Modules/CustomExtensionModule.cs#L17) (`!custom extension`)
 
 ## Q&A
