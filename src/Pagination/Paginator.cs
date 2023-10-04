@@ -387,7 +387,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
             if (properties is null || properties.IsHidden)
                 continue;
 
-            var style = properties.Style ?? (properties.Action == PaginatorAction.Exit ? ButtonStyle.Danger : ButtonStyle.Primary);
+            var style = properties.Style ?? (properties.Action == PaginatorAction.Exit ? ButtonStyle.Secondary : ButtonStyle.Secondary);
             var button = new ButtonBuilder();
 
             if (style == ButtonStyle.Link)
