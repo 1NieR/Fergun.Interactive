@@ -165,7 +165,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     protected TimeoutTaskCompletionSource<IMessage?> MessageTaskCompletionSource => _lazyMessageTcs.Value;
 
     /// <summary>
-    /// Gets the <see cref="TimeoutTaskCompletionSource{TResult}"/> used to receive modal interactions in <see cref="JumpToPageAsync(SocketMessageComponent)"/>.
+    /// Gets the <see cref="TimeoutTaskCompletionSource{TResult}"/> used to receive modal interactions in <see cref="JumpToPageAsync(IComponentInteraction)"/>.
     /// </summary>
     protected TimeoutTaskCompletionSource<IModalInteraction?> ModalTaskCompletionSource => _lazyModalTcs.Value;
 
@@ -305,7 +305,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// </summary>
     /// <param name="interaction">The component interaction.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains whether the action succeeded.</returns>
-    public virtual async ValueTask<bool> JumpToPageAsync(SocketMessageComponent interaction)
+    public virtual async ValueTask<bool> JumpToPageAsync(IComponentInteraction interaction)
     {
         if (JumpInputUserId != 0)
         {
@@ -503,7 +503,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     }
 
     /// <inheritdoc cref="IInteractiveInputHandler.HandleInteractionAsync"/>
-    public virtual async Task<InteractiveInputResult> HandleInteractionAsync(SocketMessageComponent input, IUserMessage message)
+    public virtual async Task<InteractiveInputResult> HandleInteractionAsync(IComponentInteraction input, IUserMessage message)
     {
         InteractiveGuards.NotNull(input);
         InteractiveGuards.NotNull(message);
@@ -526,6 +526,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
             var emote = (input
                     .Message
                     .Components
+                    .OfType<ActionRowComponent>()
                     .SelectMany(x => x.Components)
                     .FirstOrDefault(x => x is ButtonComponent button && button.CustomId == input.Data.CustomId) as ButtonComponent)?
                 .Emote;
@@ -626,8 +627,8 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// <inheritdoc />
     async Task<IInteractiveResult<InteractiveInputStatus>> IInteractiveInputHandler.HandleInteractionAsync(IComponentInteraction input, IUserMessage message)
     {
-        InteractiveGuards.ExpectedType<IComponentInteraction, SocketMessageComponent>(input, out var socketMessageComponent);
-        return await HandleInteractionAsync(socketMessageComponent, message).ConfigureAwait(false);
+        InteractiveGuards.ExpectedType<IComponentInteraction, IComponentInteraction>(input, out var componentInteraction);
+        return await HandleInteractionAsync(componentInteraction, message).ConfigureAwait(false);
     }
 
     /// <summary>

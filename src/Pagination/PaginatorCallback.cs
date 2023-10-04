@@ -60,7 +60,7 @@ internal sealed class PaginatorCallback : IInteractiveCallback
     /// <summary>
     /// Gets the interaction that was received to stop the paginator.
     /// </summary>
-    public SocketMessageComponent? StopInteraction { get; private set; }
+    public IComponentInteraction? StopInteraction { get; private set; }
 
     /// <inheritdoc/>
     public void Cancel() => TimeoutTaskSource.TryCancel();
@@ -108,19 +108,19 @@ internal sealed class PaginatorCallback : IInteractiveCallback
     }
 
     /// <inheritdoc/>
-    public async Task ExecuteAsync(SocketInteraction interaction)
+    public async Task ExecuteAsync(IDiscordInteraction interaction)
     {
-        if (interaction is SocketModal modal)
+        if (interaction is IModalInteraction modal)
         {
             await Paginator.HandleModalAsync(modal, Message).ConfigureAwait(false);
         }
 
-        if (interaction is not SocketMessageComponent component)
+        if (interaction is not IComponentInteraction component)
         {
             return;
         }
 
-        var result = await Paginator.HandleInteractionAsync(component, Message).ConfigureAwait(false);
+var result = await Paginator.HandleInteractionAsync(component, Message).ConfigureAwait(false);
 
         switch (result.Status)
         {

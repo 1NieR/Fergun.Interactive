@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Net;
+using Discord.Rest;
 using Discord.WebSocket;
 using Fergun.Interactive.Extensions;
 using Fergun.Interactive.Pagination;
@@ -24,8 +25,8 @@ namespace Fergun.Interactive;
 public class InteractiveService
 {
     private readonly BaseSocketClient _client;
-    private readonly ConcurrentDictionary<ulong, IInteractiveCallback> _callbacks = new();
-    private readonly ConcurrentDictionary<Guid, IInteractiveCallback> _filteredCallbacks = new();
+    private readonly NonBlocking.ConcurrentDictionary<ulong, IInteractiveCallback> _callbacks = new();
+    private readonly NonBlocking.ConcurrentDictionary<Guid, IInteractiveCallback> _filteredCallbacks = new();
     private readonly InteractiveConfig _config;
 
     /// <summary>
@@ -910,7 +911,7 @@ public class InteractiveService
     }
 
     private static async Task ApplyActionOnStopAsync<TOption>(IInteractiveElement<TOption> element, IInteractiveMessageResult result,
-        IDiscordInteraction? lastInteraction, SocketMessageComponent? stopInteraction, bool deferInteraction)
+        IDiscordInteraction? lastInteraction, IComponentInteraction? stopInteraction, bool deferInteraction)
     {
         bool ephemeral = result.Message.Flags.GetValueOrDefault().HasFlag(MessageFlags.Ephemeral);
 
@@ -1004,7 +1005,7 @@ public class InteractiveService
                 else if (!ephemeral)
                 {
                     // Fallback for normal messages that don't use interactions or the token is no longer valid, only works for non-ephemeral messages
-                    await result.Message.ModifyAsync(UpdateMessage).ConfigureAwait(false);
+                        await result.Message.ModifyAsync(UpdateMessage).ConfigureAwait(false);
                 }
             }
             catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.UnknownMessage)
@@ -1106,11 +1107,11 @@ public class InteractiveService
         return Task.CompletedTask;
     }
 
-    private Task InteractionCreated(SocketInteraction interaction)
+    private Task InteractionCreated(IDiscordInteraction interaction)
     {
         ulong messageId = 0;
 
-        if (interaction is SocketMessageComponent componentInteraction
+        if (interaction is IComponentInteraction componentInteraction
             && _callbacks.TryGetValue(componentInteraction.Message.Id, out var callback)
             || interaction is SocketModal modal
             && ulong.TryParse(modal.Data.CustomId, out messageId)

@@ -178,7 +178,7 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
 
                 var button = new ButtonBuilder()
                     .WithCustomId(emote?.ToString() ?? label)
-                    .WithStyle(ButtonStyle.Primary)
+                    .WithStyle(ButtonStyle.Secondary)
                     .WithEmote(emote)
                     .WithDisabled(disableAll);
 
@@ -291,7 +291,7 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
     }
 
     /// <inheritdoc cref="IInteractiveInputHandler.HandleInteractionAsync"/>
-    public virtual Task<InteractiveInputResult<TOption>> HandleInteractionAsync(SocketMessageComponent input, IUserMessage message)
+    public virtual Task<InteractiveInputResult<TOption>> HandleInteractionAsync(IComponentInteraction input, IUserMessage message)
     {
         InteractiveGuards.NotNull(input);
         InteractiveGuards.NotNull(message);
@@ -314,6 +314,7 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
             ComponentType.SelectMenu => (input
                     .Message
                     .Components
+                    .OfType<ActionRowComponent>()
                     .FirstOrDefault(x => x.Components.Any(y => y.Type == ComponentType.SelectMenu && y.CustomId == input.Data.CustomId))?
                     .Components
                     .FirstOrDefault() as SelectMenuComponent)?
@@ -361,8 +362,8 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
     /// <inheritdoc/>
     async Task<IInteractiveResult<InteractiveInputStatus>> IInteractiveInputHandler.HandleInteractionAsync(IComponentInteraction input, IUserMessage message)
     {
-        InteractiveGuards.ExpectedType<IComponentInteraction, SocketMessageComponent>(input, out var socketMessageComponent);
-        return await HandleInteractionAsync(socketMessageComponent, message).ConfigureAwait(false);
+        InteractiveGuards.ExpectedType<IComponentInteraction, IComponentInteraction>(input, out var componentInteraction);
+        return await HandleInteractionAsync(componentInteraction, message).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -186,7 +186,7 @@ public class PagedSelection<TOption> : BaseSelection<KeyValuePair<TOption, Pagin
         return builder;
     }
 
-    public override async Task<InteractiveInputResult<KeyValuePair<TOption, Paginator>>> HandleInteractionAsync(SocketMessageComponent input, IUserMessage message)
+    public override async Task<InteractiveInputResult<KeyValuePair<TOption, Paginator>>> HandleInteractionAsync(IComponentInteraction input, IUserMessage message)
     {
         if (input.Message.Id != message.Id || !this.CanInteract(input.User))
         {
