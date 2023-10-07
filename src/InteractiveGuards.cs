@@ -139,8 +139,7 @@ internal static class InteractiveGuards
 
     public static void ValidResponseType(InteractionResponseType responseType, IDiscordInteraction interaction, [CallerArgumentExpression(nameof(responseType))] string? parameterName = null)
     {
-        if (interaction is not IComponentInteraction &&
-            responseType is InteractionResponseType.DeferredUpdateMessage or InteractionResponseType.UpdateMessage)
+        if (interaction is not IComponentInteraction)
         {
             throw new ArgumentException($"Interaction response type {responseType} can only be used on component interactions.", parameterName);
         }
