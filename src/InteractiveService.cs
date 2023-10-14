@@ -1112,7 +1112,7 @@ public class InteractiveService
 
         if (interaction is IComponentInteraction componentInteraction
             && _callbacks.TryGetValue(componentInteraction.Message.Id, out var callback)
-            || interaction is SocketModal modal
+            || interaction is IModalInteraction modal
             && ulong.TryParse(modal.Data.CustomId, out messageId)
             && _callbacks.TryGetValue(messageId, out callback))
         {
