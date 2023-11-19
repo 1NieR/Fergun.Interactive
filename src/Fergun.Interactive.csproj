@@ -22,12 +22,17 @@ This is a fork of Discord.InteractivityAddon that adds several features like mor
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Discord.Net.WebSocket" Version="3.12.0" />
+    <PackageReference Include="Discord.Net.WebSocket" Version="3.13.0" />
     <PackageReference Include="NonBlocking" Version="2.1.2" />
     <PackageReference Include="PolySharp" Version="1.13.2">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
+
+<!--  <ItemGroup>-->
+<!--    <ProjectReference Include="..\..\..\..\..\Program Files\Bots\DS.NET\Discord.Net-feature-create-roles\src\Discord.Net.WebSocket\Discord.Net.WebSocket.csproj" />-->
+<!--  </ItemGroup>-->
+  
 
 </Project>
