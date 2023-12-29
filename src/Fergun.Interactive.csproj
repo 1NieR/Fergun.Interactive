@@ -22,9 +22,9 @@ This is a fork of Discord.InteractivityAddon that adds several features like mor
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Discord.Net.WebSocket" Version="3.13.0-20231226.1" />
+    <PackageReference Include="Discord.Net.WebSocket" Version="3.13.0-20231226.3" />
     <PackageReference Include="NonBlocking" Version="2.1.2" />
-    <PackageReference Include="PolySharp" Version="1.14.0">
+    <PackageReference Include="PolySharp" Version="1.14.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
