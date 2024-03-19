@@ -15,8 +15,7 @@ internal sealed class SelectionCallback<TOption> : IInteractiveCallback
 
     public SelectionCallback(BaseSelection<TOption> selection, IUserMessage message,
         TimeoutTaskCompletionSource<(TOption?, InteractiveStatus)> timeoutTaskSource,
-        DateTimeOffset startTime, 
-        IDiscordInteraction? initialInteraction = null)
+        DateTimeOffset startTime, IDiscordInteraction? initialInteraction = null)
     {
         Selection = selection;
         Message = message;
@@ -119,7 +118,7 @@ internal sealed class SelectionCallback<TOption> : IInteractiveCallback
         if (interaction is not IComponentInteraction component)
             return;
 
-var result = await Selection.HandleInteractionAsync(component, Message).ConfigureAwait(false);
+        var result = await Selection.HandleInteractionAsync(component, Message).ConfigureAwait(false);
 
         switch (result.Status)
         {

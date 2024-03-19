@@ -48,7 +48,7 @@ internal sealed class PaginatorCallback : IInteractiveCallback
     public IDiscordInteraction? LastInteraction { get; private set; }
 
     /// <summary>
-    /// Gets the messages that was received to stop the paginator.
+    /// Gets the message that was received to stop the paginator.
     /// </summary>
     public IMessage? StopMessage { get; private set; }
 
@@ -120,7 +120,7 @@ internal sealed class PaginatorCallback : IInteractiveCallback
             return;
         }
 
-var result = await Paginator.HandleInteractionAsync(component, Message).ConfigureAwait(false);
+        var result = await Paginator.HandleInteractionAsync(component, Message).ConfigureAwait(false);
 
         switch (result.Status)
         {

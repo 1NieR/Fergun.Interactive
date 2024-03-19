@@ -4,12 +4,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Discord;
 using Discord.Net;
-using Discord.Rest;
 using Discord.WebSocket;
 using Fergun.Interactive.Extensions;
 using Fergun.Interactive.Pagination;
@@ -25,8 +23,8 @@ namespace Fergun.Interactive;
 public class InteractiveService
 {
     private readonly BaseSocketClient _client;
-    private readonly NonBlocking.ConcurrentDictionary<ulong, IInteractiveCallback> _callbacks = new();
-    private readonly NonBlocking.ConcurrentDictionary<Guid, IInteractiveCallback> _filteredCallbacks = new();
+    private readonly ConcurrentDictionary<ulong, IInteractiveCallback> _callbacks = new();
+    private readonly ConcurrentDictionary<Guid, IInteractiveCallback> _filteredCallbacks = new();
     private readonly InteractiveConfig _config;
 
     /// <summary>
@@ -148,7 +146,7 @@ public class InteractiveService
     /// <summary>
     /// Attempts to remove and return a callback.
     /// </summary>
-    /// <param name="id">The Id of the callback.</param>
+    /// <param name="id">The ID of the callback.</param>
     /// <param name="callback">The callback, if found.</param>
     /// <returns>Whether the callback was removed.</returns>
     public bool TryRemoveCallback(ulong id, out IInteractiveCallback callback)
@@ -283,7 +281,7 @@ public class InteractiveService
         {
             await message.DeleteAsync().ConfigureAwait(false);
         }
-        catch (HttpException e) when (e.HttpCode == HttpStatusCode.NotFound)
+        catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.UnknownMessage)
         {
             // We want to delete the message so we don't care if the message has been already deleted.
         }
@@ -462,7 +460,7 @@ public class InteractiveService
     /// The task result contains an <see cref="InteractiveMessageResult"/> with the message used for pagination
     /// (which may not be valid if the message has been deleted), the elapsed time and the status.<br/>
     /// If the paginator only contains one page, the task will return when the message has been sent and the result
-    /// will contain the sent message and a <see cref="InteractiveStatus.Success"/> status.
+    /// will contain the message sent and a <see cref="InteractiveStatus.Success"/> status.
     /// </returns>
     /// <exception cref="ArgumentException"/>
     /// <exception cref="ArgumentNullException"/>
@@ -485,7 +483,7 @@ public class InteractiveService
     /// The task result contains an <see cref="InteractiveMessageResult"/> with the message used for pagination
     /// (which may not be valid if the message has been deleted), the elapsed time and the status.<br/>
     /// If the paginator only contains one page, the task will return when the message has been sent and the result
-    /// will contain the sent message and a <see cref="InteractiveStatus.Success"/> status.
+    /// will contain the message sent and a <see cref="InteractiveStatus.Success"/> status.
     /// </returns>
     /// <exception cref="ArgumentException"/>
     /// <exception cref="ArgumentNullException"/>
@@ -514,7 +512,7 @@ public class InteractiveService
     /// The task result contains an <see cref="InteractiveMessageResult"/> with the message used for pagination
     /// (which may not be valid if the message has been deleted), the elapsed time and the status.<br/>
     /// If the paginator only contains one page, the task will return when the message has been sent and the result
-    /// will contain the sent message and a <see cref="InteractiveStatus.Success"/> status.
+    /// will contain the message sent and a <see cref="InteractiveStatus.Success"/> status.
     /// </returns>
     /// <exception cref="ArgumentException"/>
     /// <exception cref="ArgumentNullException"/>
@@ -741,25 +739,25 @@ public class InteractiveService
     private async Task<InteractiveMessageResult> WaitForPaginatorResultAsync(PaginatorCallback callback)
     {
         _callbacks[callback.Message.Id] = callback;
-        bool hasJumpAction = callback.Paginator.Emotes.Values.Any(x => x == PaginatorAction.Jump);
+        bool hasReactions = callback.Paginator.InputType.HasFlag(InputType.Reactions);
 
         // A CancellationTokenSource is used here for 2 things:
         // 1. To stop WaitForMessagesAsync() to avoid memory leaks
         // 2. To cancel InitializeMessageAsync() to avoid adding reactions after TimeoutTaskSource.Task has returned.
-        using var cts = callback.Paginator.InputType.HasFlag(InputType.Reactions) || hasJumpAction
-            ? new CancellationTokenSource()
-            : null;
+        using var cts = hasReactions ? new CancellationTokenSource() : null;
 
-        _ = callback.Paginator.InitializeMessageAsync(callback.Message, cts?.Token ?? default).ConfigureAwait(false);
-
-        if (callback.Paginator.InputType.HasFlag(InputType.Reactions) && hasJumpAction)
+        if (hasReactions)
         {
-            _ = WaitForMessagesAsync().ConfigureAwait(false);
+            _ = callback.Paginator.InitializeMessageAsync(callback.Message, cts!.Token).ConfigureAwait(false);
+
+            if (callback.Paginator.Emotes.Values.Any(x => x == PaginatorAction.Jump))
+            {
+                _ = WaitForMessagesAsync(cts).ConfigureAwait(false);
+            }
         }
 
         var status = await callback.TimeoutTaskSource.Task.ConfigureAwait(false);
         cts?.Cancel();
-        cts?.Dispose();
 
         var result = InteractiveMessageResultBuilder.FromCallback(callback, status).Build();
 
@@ -770,17 +768,12 @@ public class InteractiveService
 
         return result;
 
-        async Task WaitForMessagesAsync()
+        async Task WaitForMessagesAsync(CancellationTokenSource cancellationTokenSource)
         {
-            if (cts is null)
-            {
-                return;
-            }
-
-            while (!cts.IsCancellationRequested)
+            while (!cancellationTokenSource.IsCancellationRequested)
             {
                 var messageResult = await NextMessageAsync(msg => msg.Channel.Id == callback.Message.Channel.Id && msg.Source == MessageSource.User,
-                    null, callback.TimeoutTaskSource.Delay, cts.Token).ConfigureAwait(false);
+                    null, callback.TimeoutTaskSource.Delay, cancellationTokenSource.Token).ConfigureAwait(false);
                 if (messageResult.IsSuccess)
                 {
                     await callback.ExecuteAsync(messageResult.Value).ConfigureAwait(false);
@@ -815,7 +808,6 @@ public class InteractiveService
 
         var (selected, status) = await callback.TimeoutTaskSource.Task.ConfigureAwait(false);
         cts?.Cancel();
-        cts?.Dispose();
 
         var result = InteractiveMessageResultBuilder<TOption?>.FromCallback(callback, selected, status).Build();
 
@@ -950,7 +942,7 @@ public class InteractiveService
                     await stopInteraction.DeferAsync().ConfigureAwait(false);
                 }
             }
-            catch (HttpException e) when (e.HttpCode == HttpStatusCode.NotFound)
+            catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.UnknownMessage)
             {
                 // We want to delete the message so we don't care if the message has been already deleted.
             }
@@ -1004,7 +996,7 @@ public class InteractiveService
                 else if (!ephemeral)
                 {
                     // Fallback for normal messages that don't use interactions or the token is no longer valid, only works for non-ephemeral messages
-                        await result.Message.ModifyAsync(UpdateMessage).ConfigureAwait(false);
+                    await result.Message.ModifyAsync(UpdateMessage).ConfigureAwait(false);
                 }
             }
             catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.UnknownMessage)
@@ -1134,7 +1126,8 @@ public class InteractiveService
             // Ugly but works
             if (pair.Value is FilteredCallback<SocketInteraction> or FilteredCallback<SocketMessageComponent>
                 or FilteredCallback<SocketSlashCommand> or FilteredCallback<SocketUserCommand>
-                or FilteredCallback<SocketMessageCommand> or FilteredCallback<SocketAutocompleteInteraction>)
+                or FilteredCallback<SocketMessageCommand> or FilteredCallback<SocketAutocompleteInteraction>
+                or FilteredCallback<SocketModal>)
             {
                 _ = Task.Run(async () =>
                 {
@@ -1154,7 +1147,7 @@ public class InteractiveService
     }
 
     private void LogError(string source, string message, Exception? exception = null)
-        => Log(new LogMessage(LogSeverity.Error, source, message, exception));
+        => Log?.Invoke(new LogMessage(LogSeverity.Error, source, message, exception));
 
     private Task LogMessage(LogMessage message) =>
         _config.LogLevel >= message.Severity

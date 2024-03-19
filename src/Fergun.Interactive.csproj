@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>1.7.3</Version>
-    <LangVersion>11</LangVersion>
+    <Version>1.7.5</Version>
+    <LangVersion>12</LangVersion>
     <Nullable>enable</Nullable>
     <Authors>d4n3436</Authors>
     <NeutralLanguage>en</NeutralLanguage>
@@ -22,8 +22,7 @@ This is a fork of Discord.InteractivityAddon that adds several features like mor
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Discord.Net.WebSocket" Version="3.13.0-20231226.3" />
-    <PackageReference Include="NonBlocking" Version="2.1.2" />
+    <PackageReference Include="Discord.Net.WebSocket" Version="3.14.1" />
     <PackageReference Include="PolySharp" Version="1.14.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

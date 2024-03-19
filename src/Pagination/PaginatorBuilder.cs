@@ -49,8 +49,10 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     }
 
     /// <inheritdoc/>
-    public virtual IList<Func<IButtonContext, IPaginatorButton>> ButtonFactories { get; protected set; }
-        = new List<Func<IButtonContext, IPaginatorButton>>();
+    public virtual IList<Func<IButtonContext, IPaginatorButton>> ButtonFactories { get; protected set; } = [];
+
+    /// <inheritdoc/>
+    public virtual IList<Func<ISelectMenuContext, IPaginatorSelectMenu>> SelectMenuFactories { get; protected set; } = [];
 
     /// <inheritdoc/>
     public virtual IPageBuilder? CanceledPage { get; set; }
@@ -62,6 +64,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     public virtual DeletionOptions Deletion { get; set; } = DeletionOptions.Valid | DeletionOptions.Invalid;
 
     /// <inheritdoc/>
+    /// <remarks>The default value is <see cref="InputType.Buttons"/>.</remarks>
     public virtual InputType InputType { get; set; } = InputType.Buttons;
 
     /// <inheritdoc/>
@@ -219,7 +222,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <summary>
     /// Adds an emote related to a paginator action.
     /// </summary>
-    /// <remarks>If you want to customize to your buttons,use the other overloads instead.</remarks>
+    /// <remarks>If you want to customize your buttons, use the other overloads instead.</remarks>
     /// <param name="option">The pair of emote and action.</param>
     /// <returns>This builder.</returns>
     public virtual TBuilder AddOption(KeyValuePair<IEmote, PaginatorAction> option)
@@ -228,7 +231,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <summary>
     /// Adds an emote related to a paginator action.
     /// </summary>
-    /// <remarks>If you want to customize to your buttons, use the other overloads instead.</remarks>
+    /// <remarks>If you want to customize your buttons, use the other overloads instead.</remarks>
     /// <param name="emote">The emote.</param>
     /// <param name="action">The paginator action.</param>
     /// <returns>This builder.</returns>
@@ -249,7 +252,6 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <summary>
     /// Adds a paginator button with the specified text, action and style.
     /// </summary>
-    /// <remarks>The paginator buttons are only used when <see cref="InputType"/> contains <see cref="Fergun.Interactive.InputType.Buttons"/>.</remarks>
     /// <param name="text">The text (label) that will be displayed in the button.</param>
     /// <param name="action">The paginator action.</param>
     /// <param name="style">The button style. If the value is null, the library will decide the style of the button.</param>
@@ -262,7 +264,6 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <summary>
     /// Adds a paginator button with the specified emote, action and style.
     /// </summary>
-    /// <remarks>The paginator buttons are only used when <see cref="InputType"/> contains <see cref="Fergun.Interactive.InputType.Buttons"/>.</remarks>
     /// <param name="emote">The emote.</param>
     /// <param name="action">The paginator action.</param>
     /// <param name="style">The button style. If the value is null, the library will decide the style of the button.</param>
@@ -278,7 +279,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <param name="url">The url of the button.</param>
     /// <param name="emote">The emote.</param>
     /// <param name="text">The text (label) that will be displayed in the button.</param>
-    /// <param name="isDisabled">A value indicating whether to disable the button.</param>
+    /// <param name="isDisabled">A value indicating whether to disable the button. If the value is null, the library will decide its status.</param>
     /// <returns>This builder.</returns>
     public virtual TBuilder AddOption(string url, IEmote? emote, string? text, bool? isDisabled = null)
     {
@@ -299,7 +300,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <param name="emote">The emote.</param>
     /// <param name="text">The text (label) that will be displayed in the button.</param>
     /// <param name="style">The button style to use in the button. If the value is null, the library will decide the style of the button.</param>
-    /// <param name="isDisabled">A value indicating whether to disable the button.</param>
+    /// <param name="isDisabled">A value indicating whether to disable the button. If the value is null, the library will decide its status.</param>
     /// <returns>This builder.</returns>
     public virtual TBuilder AddOption(string customId, IEmote? emote, string? text, ButtonStyle? style, bool? isDisabled = null)
     {
@@ -315,12 +316,11 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <summary>
     /// Adds a paginator button with the specified properties.
     /// </summary>
-    /// <remarks>The paginator buttons are only used when <see cref="InputType"/> contains <see cref="Fergun.Interactive.InputType.Buttons"/>.</remarks>
     /// <param name="action">The paginator action.</param>
     /// <param name="emote">The emote.</param>
     /// <param name="text">The text (label) that will be displayed in the button.</param>
     /// <param name="style">The button style to use in the button. If the value is null, the library will decide the style of the button.</param>
-    /// <param name="isDisabled">A value indicating whether to disable the button.</param>
+    /// <param name="isDisabled">A value indicating whether to disable the button. If the value is null, the library will decide its status.</param>
     /// <returns>This builder.</returns>
     public virtual TBuilder AddOption(PaginatorAction action, IEmote? emote, string? text, ButtonStyle? style = null, bool? isDisabled = null)
     {
@@ -333,7 +333,6 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <summary>
     /// Adds a paginator button.
     /// </summary>
-    /// <remarks>The button style and text are only used when <see cref="InputType"/> contains <see cref="Fergun.Interactive.InputType.Buttons"/>.</remarks>
     /// <param name="button">The paginator button.</param>
     /// <returns>This builder.</returns>
     public virtual TBuilder AddOption(IPaginatorButton button)
@@ -346,13 +345,110 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <summary>
     /// Adds a factory method that creates a paginator button.
     /// </summary>
-    /// <remarks>The button style and text are only used when <see cref="InputType"/> contains <see cref="Fergun.Interactive.InputType.Buttons"/>.</remarks>
     /// <param name="buttonFactory">The factory of a paginator button.</param>
     /// <returns>This builder.</returns>
     public virtual TBuilder AddOption(Func<IButtonContext, IPaginatorButton> buttonFactory)
     {
         InteractiveGuards.NotNull(buttonFactory);
         ButtonFactories.Add(buttonFactory);
+        return (TBuilder)this;
+    }
+
+    /// <summary>
+    /// Sets the paginator select menus.
+    /// </summary>
+    /// <remarks>
+    /// When using this overload, the select menus will have their enabled status managed by the library.<br/>
+    /// Paginator select menus are detached from the paginator and their interactions must be manually handled.
+    /// </remarks>
+    /// <param name="builders">The select menu builders.</param>
+    /// <returns>This builder.</returns>
+    public virtual TBuilder WithSelectMenus(IEnumerable<SelectMenuBuilder> builders)
+    {
+        InteractiveGuards.NotNull(builders);
+        return WithSelectMenus(builders.Select(x => new PaginatorSelectMenu(x)));
+    }
+
+    /// <summary>
+    /// Sets the paginator select menus.
+    /// </summary>
+    /// <remarks>Paginator select menus are detached from the paginator and their interactions must be manually handled.</remarks>
+    /// <param name="selectMenus">The paginator select menus.</param>
+    /// <returns>This builder.</returns>
+    public virtual TBuilder WithSelectMenus(IEnumerable<IPaginatorSelectMenu> selectMenus)
+    {
+        InteractiveGuards.NotNull(selectMenus);
+        return WithSelectMenus(selectMenus.Select(x => new Func<ISelectMenuContext, IPaginatorSelectMenu>(_ => x)));
+    }
+
+    /// <summary>
+    /// Sets the paginator select menus.
+    /// </summary>
+    /// <remarks>Paginator select menus are detached from the paginator and their interactions must be manually handled.</remarks>
+    /// <param name="selectMenuFactories">The paginator select menu factories.</param>
+    /// <returns>This builder.</returns>
+    public virtual TBuilder WithSelectMenus(IEnumerable<Func<ISelectMenuContext, IPaginatorSelectMenu>> selectMenuFactories)
+    {
+        InteractiveGuards.NotNull(selectMenuFactories);
+        SelectMenuFactories = selectMenuFactories.ToList();
+        return (TBuilder)this;
+    }
+
+    /// <summary>
+    /// Adds a paginator select menu with the specified properties.
+    /// </summary>
+    /// <remarks>Paginator select menus are detached from the paginator and their interactions must be manually handled.</remarks>
+    /// <param name="customId">The custom ID.</param>
+    /// <param name="options">The options.</param>
+    /// <param name="placeholder">The placeholder of this select menu.</param>
+    /// <param name="maxValues">The max values of this select menu.</param>
+    /// <param name="minValues">The min values of this select menu.</param>
+    /// <param name="isDisabled">A value indicating whether to disable the select menu. If the value is null, the library will decide its status.</param>
+    /// <param name="type">The <see cref="ComponentType"/> of this select menu.</param>
+    /// <param name="channelTypes">The types of channels this menu can select (only valid on select menus of type <see cref="ComponentType.ChannelSelect"/>).</param>
+    /// <param name="defaultValues">The default values of the select menu.</param>
+    /// <returns>This builder.</returns>
+    public virtual TBuilder AddSelectMenu(string customId, List<SelectMenuOptionBuilder>? options = null, string? placeholder = null, int maxValues = 1, int minValues = 1,
+        bool? isDisabled = null, ComponentType type = ComponentType.SelectMenu, List<ChannelType>? channelTypes = null, List<SelectMenuDefaultValue>? defaultValues = null)
+    {
+        return AddSelectMenu(new SelectMenuBuilder(customId, options, placeholder, maxValues, minValues, isDisabled ?? false, type, channelTypes, defaultValues), isDisabled);
+    }
+
+    /// <summary>
+    /// Adds a paginator select menu from a select menu builder.
+    /// </summary>
+    /// <remarks>Paginator select menus are detached from the paginator and their interactions must be manually handled.</remarks>
+    /// <param name="builder">The select menu builder.</param>
+    /// <param name="isDisabled">A value indicating whether to disable the select menu. If the value is null, the library will decide its status. This value overrides the one in <paramref name="builder"/>.</param>
+    /// <returns>This builder.</returns>
+    public virtual TBuilder AddSelectMenu(SelectMenuBuilder builder, bool? isDisabled = null)
+    {
+        InteractiveGuards.NotNull(builder);
+        return AddSelectMenu(new PaginatorSelectMenu(builder, isDisabled));
+    }
+
+    /// <summary>
+    /// Adds a paginator select menu.
+    /// </summary>
+    /// <remarks>Paginator select menus are detached from the paginator and their interactions must be manually handled.</remarks>
+    /// <param name="selectMenu">The select menu.</param>
+    /// <returns>This builder.</returns>
+    public virtual TBuilder AddSelectMenu(IPaginatorSelectMenu selectMenu)
+    {
+        InteractiveGuards.NotNull(selectMenu);
+        return AddSelectMenu(_ => selectMenu);
+    }
+
+    /// <summary>
+    /// Adds a factory method that creates a paginator select menu.
+    /// </summary>
+    /// <remarks>Paginator select menus are detached from the paginator and their interactions must be manually handled.</remarks>
+    /// <param name="selectMenuFactory">The select menu factory.</param>
+    /// <returns>This builder.</returns>
+    public virtual TBuilder AddSelectMenu(Func<ISelectMenuContext, IPaginatorSelectMenu> selectMenuFactory)
+    {
+        InteractiveGuards.NotNull(selectMenuFactory);
+        SelectMenuFactories.Add(selectMenuFactory);
         return (TBuilder)this;
     }
 
@@ -392,6 +488,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <summary>
     /// Sets the input type, that is, what is used to interact with the <typeparamref name="TPaginator"/>.
     /// </summary>
+    /// <remarks>The default value is <see cref="InputType.Buttons"/>.</remarks>
     /// <param name="type">The input type.</param>
     /// <returns>This builder.</returns>
     public virtual TBuilder WithInputType(InputType type)
@@ -401,6 +498,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     }
 
     /// <inheritdoc/>
+    /// <remarks>The default value is <see cref="ActionOnStop.ModifyMessage"/>.</remarks>
     public virtual TBuilder WithActionOnCancellation(ActionOnStop action)
     {
         ActionOnCancellation = action;
@@ -408,6 +506,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     }
 
     /// <inheritdoc/>
+    /// <remarks>The default value is <see cref="ActionOnStop.ModifyMessage"/>.</remarks>
     public virtual TBuilder WithActionOnTimeout(ActionOnStop action)
     {
         ActionOnTimeout = action;
@@ -418,6 +517,8 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// Sets the maximum time to wait for a "jump to page" input.
     /// </summary>
     /// <remarks>The default value is 30 seconds.</remarks>
+    /// <param name="jumpInputTimeout">The time.</param>
+    /// <returns>This builder.</returns>
     public virtual TBuilder WithJumpInputTimeout(TimeSpan jumpInputTimeout)
     {
         JumpInputTimeout = jumpInputTimeout;
@@ -431,6 +532,8 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// In button inputs, this is the title of the modal that is displayed.<br/>
     /// In reaction inputs, this is the content of the temporary message that is sent.
     /// </remarks>
+    /// <param name="jumpInputPrompt">The prompt.</param>
+    /// <returns>This builder.</returns>
     public virtual TBuilder WithJumpInputPrompt(string jumpInputPrompt)
     {
         JumpInputPrompt = jumpInputPrompt;
@@ -440,6 +543,8 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <summary>
     /// Gets or sets the "jump to page" text label that is displayed in the modal.
     /// </summary>
+    /// <param name="jumpInputTextLabel">The text label.</param>
+    /// <returns>This builder.</returns>
     public virtual TBuilder WithJumpInputTextLabel(string jumpInputTextLabel)
     {
         JumpInputTextLabel = jumpInputTextLabel;
@@ -453,6 +558,8 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// An invalid input may be one that isn't a number, or a number that is outside the valid range.<br/>
     /// To avoid sending a warning message about this, set the value to an empty string.
     /// </remarks>
+    /// <param name="invalidJumpInputMessage">The message.</param>
+    /// <returns>This builder.</returns>
     public virtual TBuilder WithInvalidJumpInputMessage(string invalidJumpInputMessage)
     {
         InvalidJumpInputMessage = invalidJumpInputMessage;
@@ -463,6 +570,8 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// Sets the message to display when a user attempts to use the "jump to page" action while other user is using it.
     /// </summary>
     /// <remarks>To avoid sending a warning message about this, set the value to an empty string.</remarks>
+    /// <param name="jumpInputInUseMessage">The message.</param>
+    /// <returns>This builder.</returns>
     public virtual TBuilder WithJumpInputInUseMessage(string jumpInputInUseMessage)
     {
         JumpInputInUseMessage = jumpInputInUseMessage;
@@ -473,6 +582,8 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// Sets the message to display when receiving an expired "jump to page" input.
     /// </summary>
     /// <remarks>To avoid sending a warning message about this, set the value to an empty string.</remarks>
+    /// <param name="expiredJumpInputMessage">The message.</param>
+    /// <returns>This builder.</returns>
     public virtual TBuilder WithExpiredJumpInputMessage(string expiredJumpInputMessage)
     {
         ExpiredJumpInputMessage = expiredJumpInputMessage;

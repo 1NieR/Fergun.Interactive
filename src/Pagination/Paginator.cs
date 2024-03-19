@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Discord;
+using Discord.Net;
 using Discord.WebSocket;
 using Fergun.Interactive.Extensions;
 
@@ -31,6 +32,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
         InteractiveGuards.NotNull(properties.Users);
         InteractiveGuards.NotNull(properties.Options);
         InteractiveGuards.NotNull(properties.ButtonFactories);
+        InteractiveGuards.NotNull(properties.SelectMenuFactories);
         InteractiveGuards.NotEmpty(properties.ButtonFactories);
         InteractiveGuards.SupportedInputType(properties.InputType, false);
 
@@ -42,6 +44,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
         Users = properties.Users.ToArray();
         Emotes = properties.Options.AsReadOnly();
         ButtonFactories = new ReadOnlyCollection<Func<IButtonContext, IPaginatorButton>>(properties.ButtonFactories);
+        SelectMenuFactories = new ReadOnlyCollection<Func<ISelectMenuContext, IPaginatorSelectMenu>>(properties.SelectMenuFactories);
         CanceledPage = properties.CanceledPage?.Build();
         TimeoutPage = properties.TimeoutPage?.Build();
         Deletion = properties.Deletion;
@@ -88,8 +91,14 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// <summary>
     /// Gets the button factories.
     /// </summary>
-    /// <remarks>This property is only used when <see cref="InputType"/> contains <see cref="Fergun.Interactive.InputType.Buttons"/>.</remarks>
+    /// <remarks>This property is only used when <see cref="InputType"/> contains <see cref="InputType.Buttons"/>.</remarks>
     public IReadOnlyList<Func<IButtonContext, IPaginatorButton>> ButtonFactories { get; }
+
+    /// <summary>
+    /// Gets the select menu factories.
+    /// </summary>
+    /// <remarks>Paginator select menus are detached from the paginator and their interactions must be manually handled.</remarks>
+    public IReadOnlyList<Func<ISelectMenuContext, IPaginatorSelectMenu>> SelectMenuFactories { get; }
 
     /// <inheritdoc/>
     public IPage? CanceledPage { get; }
@@ -232,6 +241,8 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// <returns>A task representing the asynchronous operation. The task result contains whether the action succeeded.</returns>
     public virtual async ValueTask<bool> JumpToPageAsync(SocketReaction reaction)
     {
+        InteractiveGuards.NotNull(reaction);
+
         if (JumpInputUserId != 0)
         {
             // The user pressed the "jump to page" reaction again
@@ -270,7 +281,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
         {
             await promptMessage.DeleteAsync().ConfigureAwait(false);
         }
-        catch
+        catch (HttpException ex) when (ex.DiscordCode == DiscordErrorCode.UnknownMessage)
         {
             // We want to delete the message so we don't care if the message has been already deleted.
         }
@@ -307,6 +318,8 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// <returns>A task representing the asynchronous operation. The task result contains whether the action succeeded.</returns>
     public virtual async ValueTask<bool> JumpToPageAsync(IComponentInteraction interaction)
     {
+        InteractiveGuards.NotNull(interaction);
+
         if (JumpInputUserId != 0)
         {
             // The user canceled the modal and then pressed the "jump to page" button again
@@ -387,7 +400,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
             if (properties is null || properties.IsHidden)
                 continue;
 
-            var style = properties.Style ?? (properties.Action == PaginatorAction.Exit ? ButtonStyle.Secondary : ButtonStyle.Secondary);
+            var style = properties.Style ?? (properties.Action == PaginatorAction.Exit ? ButtonStyle.Danger : ButtonStyle.Primary);
             var button = new ButtonBuilder();
 
             if (style == ButtonStyle.Link)
@@ -408,6 +421,21 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
 
             builder.WithButton(button);
         }
+
+        for (int i = 0; i < SelectMenuFactories.Count; i++)
+        {
+            var context = new SelectMenuContext(i, CurrentPageIndex, MaxPageIndex, disableAll);
+            var properties = SelectMenuFactories[i]?.Invoke(context);
+
+            if (properties is null || properties.IsHidden)
+                continue;
+
+            var selectMenu = new SelectMenuBuilder(properties.CustomId, properties.Options, properties.Placeholder, properties.MinValues,
+                properties.MaxValues, properties.IsDisabled ?? context.ShouldDisable(), properties.Type, properties.ChannelTypes, properties.DefaultValues);
+
+            builder.WithSelectMenu(selectMenu);
+        }
+
 
         return builder;
     }
@@ -470,33 +498,11 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
             return InteractiveInputStatus.Canceled;
         }
 
-        if (action == PaginatorAction.Jump && await JumpToPageAsync(input).ConfigureAwait(false))
+        int previousPageIndex = CurrentPageIndex;
+
+        if ((action == PaginatorAction.Jump && await JumpToPageAsync(input).ConfigureAwait(false)) || await ApplyActionAsync(action).ConfigureAwait(false))
         {
-            var currentPage = await GetOrLoadCurrentPageAsync().ConfigureAwait(false);
-            var attachments = currentPage.AttachmentsFactory is null ? null : await currentPage.AttachmentsFactory().ConfigureAwait(false);
-
-            await message.ModifyAsync(x =>
-            {
-                x.Embeds = currentPage.GetEmbedArray();
-                x.Content = currentPage.Text;
-                x.AllowedMentions = currentPage.AllowedMentions;
-                x.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
-            }).ConfigureAwait(false);
-        }
-
-        bool refreshPage = await ApplyActionAsync(action).ConfigureAwait(false);
-        if (refreshPage)
-        {
-            var currentPage = await GetOrLoadCurrentPageAsync().ConfigureAwait(false);
-            var attachments = currentPage.AttachmentsFactory is null ? null : await currentPage.AttachmentsFactory().ConfigureAwait(false);
-
-            await message.ModifyAsync(x =>
-            {
-                x.Embeds = currentPage.GetEmbedArray();
-                x.Content = currentPage.Text;
-                x.AllowedMentions = currentPage.AllowedMentions;
-                x.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
-            }).ConfigureAwait(false);
+            await TryUpdateMessageAsync(message.ModifyAsync, previousPageIndex, false).ConfigureAwait(false);
         }
 
         return InteractiveInputStatus.Success;
@@ -510,15 +516,15 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
 
         if (!InputType.HasFlag(InputType.Buttons))
         {
-            return new(InteractiveInputStatus.Ignored);
+            return new InteractiveInputResult(InteractiveInputStatus.Ignored);
         }
 
         if (input.Message.Id != message.Id || !this.CanInteract(input.User))
         {
-            return new(InteractiveInputStatus.Ignored);
+            return new InteractiveInputResult(InteractiveInputStatus.Ignored);
         }
 
-        // Get last character of custom Id, convert it to a number and cast it to PaginatorAction
+        // Get last character of custom ID, convert it to a number and cast it to PaginatorAction
         var action = (PaginatorAction)(input.Data.CustomId?[^1] - '0' ?? -1);
         if (!Enum.IsDefined(typeof(PaginatorAction), action))
         {
@@ -542,38 +548,16 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
             return InteractiveInputStatus.Canceled;
         }
 
+        int previousPageIndex = CurrentPageIndex;
+
+        Func<Action<MessageProperties>, RequestOptions?, Task> updateMethod;
         if (action == PaginatorAction.Jump && await JumpToPageAsync(input).ConfigureAwait(false))
-        {
-            var currentPage = await GetOrLoadCurrentPageAsync().ConfigureAwait(false);
-            var attachments = currentPage.AttachmentsFactory is null ? null : await currentPage.AttachmentsFactory().ConfigureAwait(false);
-            var buttons = GetOrAddComponents(false).Build();
+            updateMethod = input.ModifyOriginalResponseAsync;
+        else if (await ApplyActionAsync(action).ConfigureAwait(false))
+            updateMethod = input.UpdateAsync;
+        else return InteractiveInputStatus.Success;
 
-            await input.ModifyOriginalResponseAsync(x =>
-            {
-                x.Content = currentPage.Text ?? ""; // workaround for d.net bug
-                x.Embeds = currentPage.GetEmbedArray();
-                x.Components = buttons;
-                x.AllowedMentions = currentPage.AllowedMentions;
-                x.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
-            }).ConfigureAwait(false);
-        }
-
-        bool refreshPage = await ApplyActionAsync(action).ConfigureAwait(false);
-        if (refreshPage)
-        {
-            var currentPage = await GetOrLoadCurrentPageAsync().ConfigureAwait(false);
-            var attachments = currentPage.AttachmentsFactory is null ? null : await currentPage.AttachmentsFactory().ConfigureAwait(false);
-            var buttons = GetOrAddComponents(false).Build();
-
-            await input.UpdateAsync(x =>
-            {
-                x.Content = currentPage.Text ?? ""; // workaround for d.net bug
-                x.Embeds = currentPage.GetEmbedArray();
-                x.Components = buttons;
-                x.AllowedMentions = currentPage.AllowedMentions;
-                x.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
-            }).ConfigureAwait(false);
-        }
+        await TryUpdateMessageAsync(updateMethod, previousPageIndex).ConfigureAwait(false);
 
         return InteractiveInputStatus.Success;
     }
@@ -589,9 +573,9 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
         InteractiveGuards.NotNull(input);
         InteractiveGuards.NotNull(message);
 
-        if (!ulong.TryParse(input.Data.CustomId, out var messageId) || messageId != message.Id || !this.CanInteract(input.User))
+        if (!ulong.TryParse(input.Data.CustomId, out ulong messageId) || messageId != message.Id || !this.CanInteract(input.User))
         {
-            return new(InteractiveInputStatus.Ignored);
+            return new InteractiveInputResult(InteractiveInputStatus.Ignored);
         }
 
         // Expired modal
@@ -606,11 +590,11 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
                 await input.DeferAsync().ConfigureAwait(false);
             }
 
-            return new(InteractiveInputStatus.Ignored);
+            return new InteractiveInputResult(InteractiveInputStatus.Ignored);
         }
 
         ModalTaskCompletionSource.TrySetResult(input);
-        return new(InteractiveInputStatus.Success);
+        return new InteractiveInputResult(InteractiveInputStatus.Success);
     }
 
     /// <inheritdoc />
@@ -634,7 +618,7 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// <summary>
     /// Initializes a message based on this paginator.
     /// </summary>
-    /// <remarks>By default this method adds the reactions to a message when <see cref="InputType"/> has <see cref="InputType.Reactions"/>.</remarks>
+    /// <remarks>By default, this method adds the reactions to a message when <see cref="InputType"/> has <see cref="InputType.Reactions"/>.</remarks>
     /// <param name="message">The message to initialize.</param>
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to cancel this request.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
@@ -650,6 +634,31 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
             }
 
             await message.AddReactionAsync(emote).ConfigureAwait(false);
+        }
+    }
+
+    // Attempts to update the message and reverts the page index to the previous one if an exception occurs
+    private async Task TryUpdateMessageAsync(Func<Action<MessageProperties>, RequestOptions?, Task> updateMethod, int previousPageIndex, bool includeComponents = true)
+    {
+        var currentPage = await GetOrLoadCurrentPageAsync().ConfigureAwait(false);
+        var attachments = currentPage.AttachmentsFactory is null ? null : await currentPage.AttachmentsFactory().ConfigureAwait(false);
+        var components = GetOrAddComponents(false).Build();
+
+        try
+        {
+            await updateMethod(x =>
+            {
+                x.Content = currentPage.Text ?? ""; // workaround for d.net bug
+                x.Embeds = currentPage.GetEmbedArray();
+                x.Components = includeComponents ? components : new Optional<MessageComponent>();
+                x.AllowedMentions = currentPage.AllowedMentions;
+                x.Attachments = attachments is null ? new Optional<IEnumerable<FileAttachment>>() : new Optional<IEnumerable<FileAttachment>>(attachments);
+            }, null).ConfigureAwait(false);
+        }
+        catch
+        {
+            CurrentPageIndex = previousPageIndex;
+            throw; // InteractiveService will handle and log the exception
         }
     }
 }
