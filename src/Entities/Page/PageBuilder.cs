@@ -62,7 +62,7 @@ public class PageBuilder : IPageBuilder<Page>, IPageBuilder
     /// <summary>
     /// Gets or sets the stickers of the <see cref="Page"/>.
     /// </summary>
-    public IReadOnlyCollection<ISticker> Stickers { get; set; } = Array.Empty<ISticker>();
+    public IReadOnlyCollection<ISticker> Stickers { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the factory of attachments.
@@ -336,6 +336,7 @@ public class PageBuilder : IPageBuilder<Page>, IPageBuilder
     /// <returns>The current builder.</returns>
     public PageBuilder WithAuthor(string name, string? iconUrl = null, string? url = null)
     {
+        InteractiveGuards.NotNull(name);
         _builder.WithAuthor(name, iconUrl, url);
         return this;
     }
@@ -348,7 +349,7 @@ public class PageBuilder : IPageBuilder<Page>, IPageBuilder
     public PageBuilder WithAuthor(IUser user)
     {
         InteractiveGuards.NotNull(user);
-        return WithAuthor(user.ToString(), user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl());
+        return WithAuthor(user.ToString()!, user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl());
     }
 
     /// <summary>
@@ -571,7 +572,6 @@ public class PageBuilder : IPageBuilder<Page>, IPageBuilder
 
             Footer.Text += '\n';
         }
-
         if (footer.HasFlag(PaginatorFooter.PageNumber))
         {
             Footer.Text += $"Страница: {currentPageIndex + 1} из {maxPageIndex + 1}";

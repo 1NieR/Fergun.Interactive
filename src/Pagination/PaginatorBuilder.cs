@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 using Discord;
 
 namespace Fergun.Interactive.Pagination;
 
 /// <summary>
-/// Represents an abstract paginator builder.
+/// Represents a builder class for constructing instances of <typeparamref name="TPaginator"/>.
 /// </summary>
 /// <typeparam name="TPaginator">The type of the paginator.</typeparam>
 /// <typeparam name="TBuilder">The type of the builder.</typeparam>
@@ -38,7 +37,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <summary>
     /// Gets or sets the users who can interact with the paginator.
     /// </summary>
-    public virtual ICollection<IUser> Users { get; set; } = new Collection<IUser>();
+    public virtual ICollection<IUser> Users { get; set; } = [];
 
     /// <inheritdoc/>
     public virtual IDictionary<IEmote, PaginatorAction> Options
@@ -61,6 +60,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     public virtual IPageBuilder? TimeoutPage { get; set; }
 
     /// <inheritdoc/>
+    /// <remarks>This property is ignored on button-based paginators.</remarks>
     public virtual DeletionOptions Deletion { get; set; } = DeletionOptions.Valid | DeletionOptions.Invalid;
 
     /// <inheritdoc/>
@@ -74,6 +74,18 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <inheritdoc/>
     /// <remarks>The default value is <see cref="ActionOnStop.ModifyMessage"/>.</remarks>
     public virtual ActionOnStop ActionOnTimeout { get; set; } = ActionOnStop.ModifyMessage;
+
+    /// <summary>
+    /// Gets or sets the behavior the <typeparamref name="TPaginator"/> should exhibit when a user is not allowed to interact with it.
+    /// </summary>
+    /// <remarks>The default value is <see cref="RestrictedInputBehavior.Auto"/>.</remarks>
+    public virtual RestrictedInputBehavior RestrictedInputBehavior { get; set; }
+
+    /// <summary>
+    /// Gets or sets the factory of the <see cref="IPage"/> that will be displayed ephemerally to a user when they are not allowed to interact with the <typeparamref name="TPaginator"/>.
+    /// </summary>
+    /// <remarks>The first argument of the factory is a read-only collection of users who are allowed to interact with the paginator.</remarks>
+    public virtual Func<IReadOnlyCollection<IUser>, IPage>? RestrictedPageFactory { get; set; }
 
     /// <inheritdoc/>
     /// <remarks>The default value is 30 seconds.</remarks>
@@ -257,9 +269,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <param name="style">The button style. If the value is null, the library will decide the style of the button.</param>
     /// <returns>This builder.</returns>
     public virtual TBuilder AddOption(string text, PaginatorAction action, ButtonStyle? style)
-    {
-        return AddOption(action, null, text, style);
-    }
+        => AddOption(action, null, text, style);
 
     /// <summary>
     /// Adds a paginator button with the specified emote, action and style.
@@ -269,9 +279,7 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     /// <param name="style">The button style. If the value is null, the library will decide the style of the button.</param>
     /// <returns>This builder.</returns>
     public virtual TBuilder AddOption(IEmote emote, PaginatorAction action, ButtonStyle? style)
-    {
-        return AddOption(action, emote, null, style);
-    }
+        => AddOption(action, emote, null, style);
 
     /// <summary>
     /// Adds a link-style paginator button with the specified properties.
@@ -510,6 +518,41 @@ public abstract class PaginatorBuilder<TPaginator, TBuilder>
     public virtual TBuilder WithActionOnTimeout(ActionOnStop action)
     {
         ActionOnTimeout = action;
+        return (TBuilder)this;
+    }
+
+    /// <summary>
+    /// Sets the behavior the <typeparamref name="TPaginator"/> should exhibit when a user is not allowed to interact with it.
+    /// </summary>
+    /// <param name="behavior">The behavior.</param>
+    /// <returns>This builder.</returns>
+    public TBuilder WithRestrictedInputBehavior(RestrictedInputBehavior behavior)
+    {
+        RestrictedInputBehavior = behavior;
+        return (TBuilder)this;
+    }
+
+    /// <summary>
+    /// Sets the <see cref="IPage"/> that will be displayed ephemerally to a user when they are not allowed to interact with the <typeparamref name="TPaginator"/>.
+    /// </summary>
+    /// <param name="page">The page.</param>
+    /// <returns>This builder.</returns>
+    public virtual TBuilder WithRestrictedPage(IPage page)
+    {
+        InteractiveGuards.NotNull(page);
+        return WithRestrictedPageFactory(_ => page);
+    }
+
+    /// <summary>
+    /// Sets the factory of the <see cref="IPage"/> that will be displayed ephemerally to a user when they are not allowed to interact with the <typeparamref name="TPaginator"/>.
+    /// </summary>
+    /// <remarks>The first argument of the factory is a read-only collection of users who are allowed to interact with the paginator.</remarks>
+    /// <param name="pageFactory">The restricted page factory. The first argument is a read-only collection of users who are allowed to interact with the paginator.</param>
+    /// <returns>This builder.</returns>
+    public virtual TBuilder WithRestrictedPageFactory(Func<IReadOnlyCollection<IUser>, IPage> pageFactory)
+    {
+        InteractiveGuards.NotNull(pageFactory);
+        RestrictedPageFactory = pageFactory;
         return (TBuilder)this;
     }
 

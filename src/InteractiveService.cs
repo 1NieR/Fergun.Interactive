@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -24,11 +25,11 @@ public class InteractiveService
 {
     private readonly BaseSocketClient _client;
     private readonly ConcurrentDictionary<ulong, IInteractiveCallback> _callbacks = new();
-    private readonly ConcurrentDictionary<Guid, IInteractiveCallback> _filteredCallbacks = new();
+    private readonly ConcurrentDictionary<Guid, IFilteredCallback> _filteredCallbacks = new();
     private readonly InteractiveConfig _config;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="InteractiveService"/> class using the default timeout.
+    /// Initializes a new instance of the <see cref="InteractiveService"/> class using the default configuration.
     /// </summary>
     /// <param name="client">An instance of <see cref="BaseSocketClient"/>.</param>
     public InteractiveService(BaseSocketClient client)
@@ -37,19 +38,7 @@ public class InteractiveService
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="InteractiveService"/> class using a specified default timeout.
-    /// </summary>
-    /// <param name="client">An instance of <see cref="BaseSocketClient"/>.</param>
-    /// <param name="defaultTimeout">The default timeout for the interactive actions.</param>
-    [Obsolete("This constructor is deprecated and it will be removed in a future version. Use InteractiveService(BaseSocketClient, InteractiveConfig) instead.")]
-    public InteractiveService(BaseSocketClient client, TimeSpan defaultTimeout)
-        : this(client, new InteractiveConfig { DefaultTimeout = defaultTimeout })
-    {
-        DefaultTimeout = defaultTimeout;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="InteractiveService"/> class using the default timeout.
+    /// Initializes a new instance of the <see cref="InteractiveService"/> class using the default configuration.
     /// </summary>
     /// <param name="client">An instance of <see cref="DiscordSocketClient"/>.</param>
     public InteractiveService(DiscordSocketClient client)
@@ -58,33 +47,11 @@ public class InteractiveService
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="InteractiveService"/> class using a specified default timeout.
-    /// </summary>
-    /// <param name="client">An instance of <see cref="DiscordSocketClient"/>.</param>
-    /// <param name="defaultTimeout">The default timeout for the interactive actions.</param>
-    [Obsolete("This constructor is deprecated and will be removed in a future version. Use InteractiveService(DiscordSocketClient, InteractiveConfig) instead.")]
-    public InteractiveService(DiscordSocketClient client, TimeSpan defaultTimeout)
-        : this((BaseSocketClient)client, defaultTimeout)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="InteractiveService"/> class using the default timeout.
+    /// Initializes a new instance of the <see cref="InteractiveService"/> class using the default configuration.
     /// </summary>
     /// <param name="client">An instance of <see cref="DiscordShardedClient"/>.</param>
     public InteractiveService(DiscordShardedClient client)
         : this((BaseSocketClient)client)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="InteractiveService"/> class using a specified default timeout.
-    /// </summary>
-    /// <param name="client">An instance of <see cref="DiscordShardedClient"/>.</param>
-    /// <param name="defaultTimeout">The default timeout for the interactive actions.</param>
-    [Obsolete("This constructor is deprecated and will be removed in a future version. Use InteractiveService(DiscordShardedClient, InteractiveConfig) instead.")]
-    public InteractiveService(DiscordShardedClient client, TimeSpan defaultTimeout)
-        : this((BaseSocketClient)client, defaultTimeout)
     {
     }
 
@@ -138,18 +105,12 @@ public class InteractiveService
     public IDictionary<ulong, IInteractiveCallback> Callbacks => _callbacks;
 
     /// <summary>
-    /// Gets the default timeout for interactive actions provided by this service.
-    /// </summary>
-    [Obsolete("This property is deprecated and will be removed in a future version.")]
-    public TimeSpan DefaultTimeout { get; }
-
-    /// <summary>
     /// Attempts to remove and return a callback.
     /// </summary>
     /// <param name="id">The ID of the callback.</param>
     /// <param name="callback">The callback, if found.</param>
     /// <returns>Whether the callback was removed.</returns>
-    public bool TryRemoveCallback(ulong id, out IInteractiveCallback callback)
+    public bool TryRemoveCallback(ulong id, [MaybeNullWhen(false)] out IInteractiveCallback callback)
         => _callbacks.TryRemove(id, out callback);
 
     /// <summary>
@@ -347,80 +308,80 @@ public class InteractiveService
         => await NextEntityAsync(filter, action, timeout, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Gets the next message component that passes the <paramref name="filter"/>.
+    /// Gets the next component interaction that passes the <paramref name="filter"/>.
     /// </summary>
-    /// <param name="filter">A filter which the message component has to pass.</param>
+    /// <param name="filter">A filter which the component interaction has to pass.</param>
     /// <param name="action">
     /// An action which gets executed to incoming interactions,
-    /// where <see cref="SocketMessageComponent"/> is the incoming message component and <see cref="bool"/>
-    /// is whether the message component passed the <paramref name="filter"/>.
+    /// where <see cref="SocketMessageComponent"/> is the incoming component interaction and <see cref="bool"/>
+    /// is whether the component interaction passed the <paramref name="filter"/>.
     /// </param>
     /// <param name="timeout">The time to wait before the methods returns a timeout result.</param>
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to cancel the request.</param>
     /// <returns>
-    /// A task that represents the asynchronous wait operation for the next message component.
+    /// A task that represents the asynchronous wait operation for the next component interaction.
     /// The task result contains an <see cref="InteractiveResult{T}"/> with the
-    /// message component (if successful), the elapsed time and the status.
+    /// component interaction (if successful), the elapsed time and the status.
     /// </returns>
     public async Task<InteractiveResult<SocketMessageComponent?>> NextMessageComponentAsync(Func<SocketMessageComponent, bool>? filter = null,
         Func<SocketMessageComponent, bool, Task>? action = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         => await NextEntityAsync(filter, action, timeout, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Gets the next slash command that passes the <paramref name="filter"/>.
+    /// Gets the next slash command interaction that passes the <paramref name="filter"/>.
     /// </summary>
-    /// <param name="filter">A filter which the slash command has to pass.</param>
+    /// <param name="filter">A filter which the slash command interaction has to pass.</param>
     /// <param name="action">
     /// An action which gets executed to incoming interactions,
-    /// where <see cref="SocketSlashCommand"/> is the incoming slash command and <see cref="bool"/>
-    /// is whether the slash command passed the <paramref name="filter"/>.
+    /// where <see cref="SocketSlashCommand"/> is the incoming slash command interaction and <see cref="bool"/>
+    /// is whether the slash command interaction passed the <paramref name="filter"/>.
     /// </param>
     /// <param name="timeout">The time to wait before the methods returns a timeout result.</param>
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to cancel the request.</param>
     /// <returns>
-    /// A task that represents the asynchronous wait operation for the next slash command.
+    /// A task that represents the asynchronous wait operation for the next slash command interaction.
     /// The task result contains an <see cref="InteractiveResult{T}"/> with the
-    /// slash command (if successful), the elapsed time and the status.
+    /// slash command interaction (if successful), the elapsed time and the status.
     /// </returns>
     public async Task<InteractiveResult<SocketSlashCommand?>> NextSlashCommandAsync(Func<SocketSlashCommand, bool>? filter = null,
         Func<SocketSlashCommand, bool, Task>? action = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         => await NextEntityAsync(filter, action, timeout, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Gets the next user command that passes the <paramref name="filter"/>.
+    /// Gets the next user command interaction that passes the <paramref name="filter"/>.
     /// </summary>
-    /// <param name="filter">A filter which the user command has to pass.</param>
+    /// <param name="filter">A filter which the user command interaction has to pass.</param>
     /// <param name="action">
     /// An action which gets executed to incoming interactions,
-    /// where <see cref="SocketUserCommand"/> is the incoming user command and <see cref="bool"/>
-    /// is whether the user command passed the <paramref name="filter"/>.
+    /// where <see cref="SocketUserCommand"/> is the incoming user command interaction and <see cref="bool"/>
+    /// is whether the user command interaction passed the <paramref name="filter"/>.
     /// </param>
     /// <param name="timeout">The time to wait before the methods returns a timeout result.</param>
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to cancel the request.</param>
     /// <returns>
-    /// A task that represents the asynchronous wait operation for the next user command.
+    /// A task that represents the asynchronous wait operation for the next user command interaction.
     /// The task result contains an <see cref="InteractiveResult{T}"/> with the
-    /// user command (if successful), the elapsed time and the status.
+    /// user command interaction (if successful), the elapsed time and the status.
     /// </returns>
     public async Task<InteractiveResult<SocketUserCommand?>> NextUserCommandAsync(Func<SocketUserCommand, bool>? filter = null,
         Func<SocketUserCommand, bool, Task>? action = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
         => await NextEntityAsync(filter, action, timeout, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Gets the next message command that passes the <paramref name="filter"/>.
+    /// Gets the next message command interaction that passes the <paramref name="filter"/>.
     /// </summary>
-    /// <param name="filter">A filter which the message command has to pass.</param>
+    /// <param name="filter">A filter which the message command interaction has to pass.</param>
     /// <param name="action">
     /// An action which gets executed to incoming interactions,
-    /// where <see cref="SocketMessageCommand"/> is the incoming message command and <see cref="bool"/>
-    /// is whether the message command passed the <paramref name="filter"/>.
+    /// where <see cref="SocketMessageCommand"/> is the incoming message command interaction and <see cref="bool"/>
+    /// is whether the message command interaction passed the <paramref name="filter"/>.
     /// </param>
     /// <param name="timeout">The time to wait before the methods returns a timeout result.</param>
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to cancel the request.</param>
     /// <returns>
-    /// A task that represents the asynchronous wait operation for the next message command.
+    /// A task that represents the asynchronous wait operation for the next message command interaction.
     /// The task result contains an <see cref="InteractiveResult{T}"/> with the
-    /// message command (if successful), the elapsed time and the status.
+    /// message command interaction (if successful), the elapsed time and the status.
     /// </returns>
     public async Task<InteractiveResult<SocketMessageCommand?>> NextMessageCommandAsync(Func<SocketMessageCommand, bool>? filter = null,
         Func<SocketMessageCommand, bool, Task>? action = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
@@ -527,7 +488,7 @@ public class InteractiveService
         InteractiveGuards.DeleteAndDisableInputNotSet(paginator.ActionOnCancellation);
         InteractiveGuards.SupportedInputType(paginator, ephemeral);
         InteractiveGuards.ValidResponseType(responseType);
-        InteractiveGuards.NotCanceled(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var message = await SendOrModifyMessageAsync(paginator, interaction, responseType, ephemeral).ConfigureAwait(false);
         messageAction?.Invoke(message);
@@ -571,13 +532,13 @@ public class InteractiveService
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to cancel the selection.</param>
     /// <returns>
     /// A task that represents the asynchronous operation for sending the selection and waiting for a valid input, a timeout or a cancellation.<br/>
-    /// The task result contains an <see cref="InteractiveMessageResult{T}"/> with the selected value (if valid), the message used for the selection
+    /// The task result contains an <see cref="InteractiveMessageResult{T}"/> with the selected values (if valid), the message used for the selection
     /// (which may not be valid if the message has been deleted), the elapsed time and the status.
     /// </returns>
     /// <exception cref="ArgumentException"/>
     /// <exception cref="ArgumentNullException"/>
     /// <exception cref="NotSupportedException"/>
-    public async Task<InteractiveMessageResult<TOption?>> SendSelectionAsync<TOption>(BaseSelection<TOption> selection, IMessageChannel channel,
+    public async Task<InteractiveMessageResult<TOption>> SendSelectionAsync<TOption>(BaseSelection<TOption> selection, IMessageChannel channel,
         TimeSpan? timeout = null, Action<IUserMessage>? messageAction = null, CancellationToken cancellationToken = default)
         => await SendSelectionInternalAsync(selection, channel, timeout, null, messageAction, cancellationToken).ConfigureAwait(false);
 
@@ -592,13 +553,13 @@ public class InteractiveService
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to cancel the selection.</param>
     /// <returns>
     /// A task that represents the asynchronous operation for modifying the message to a selection and waiting for a valid input, a timeout or a cancellation.<br/>
-    /// The task result contains an <see cref="InteractiveMessageResult{T}"/> with the selected value (if valid), the message used for the selection
+    /// The task result contains an <see cref="InteractiveMessageResult{T}"/> with the selected values (if valid), the message used for the selection
     /// (which may not be valid if the message has been deleted), the elapsed time and the status.
     /// </returns>
     /// <exception cref="ArgumentException"/>
     /// <exception cref="ArgumentNullException"/>
     /// <exception cref="NotSupportedException"/>
-    public async Task<InteractiveMessageResult<TOption?>> SendSelectionAsync<TOption>(BaseSelection<TOption> selection, IUserMessage message,
+    public async Task<InteractiveMessageResult<TOption>> SendSelectionAsync<TOption>(BaseSelection<TOption> selection, IUserMessage message,
         TimeSpan? timeout = null, Action<IUserMessage>? messageAction = null, CancellationToken cancellationToken = default)
         => await SendSelectionInternalAsync(selection, null, timeout, message, messageAction, cancellationToken).ConfigureAwait(false);
 
@@ -619,13 +580,13 @@ public class InteractiveService
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to cancel the selection.</param>
     /// <returns>
     /// A task that represents the asynchronous operation for sending the selection and waiting for a valid input, a timeout or a cancellation.<br/>
-    /// The task result contains an <see cref="InteractiveMessageResult{T}"/> with the selected value (if valid), the message used for the selection
+    /// The task result contains an <see cref="InteractiveMessageResult{T}"/> with the selected values (if valid), the message used for the selection
     /// (which may not be valid if the message has been deleted), the elapsed time and the status.
     /// </returns>
     /// <exception cref="ArgumentException"/>
     /// <exception cref="ArgumentNullException"/>
     /// <exception cref="NotSupportedException"/>
-    public async Task<InteractiveMessageResult<TOption?>> SendSelectionAsync<TOption>(BaseSelection<TOption> selection, IDiscordInteraction interaction,
+    public async Task<InteractiveMessageResult<TOption>> SendSelectionAsync<TOption>(BaseSelection<TOption> selection, IDiscordInteraction interaction,
         TimeSpan? timeout = null, InteractionResponseType responseType = InteractionResponseType.ChannelMessageWithSource, bool ephemeral = false,
         Action<IUserMessage>? messageAction = null, CancellationToken cancellationToken = default)
     {
@@ -636,18 +597,118 @@ public class InteractiveService
         InteractiveGuards.DeleteAndDisableInputNotSet(selection.ActionOnSuccess);
         InteractiveGuards.SupportedInputType(selection, ephemeral);
         InteractiveGuards.ValidResponseType(responseType);
-        InteractiveGuards.NotCanceled(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var message = await SendOrModifyMessageAsync(selection, interaction, responseType, ephemeral).ConfigureAwait(false);
         messageAction?.Invoke(message);
 
-        var timeoutTaskSource = new TimeoutTaskCompletionSource<(TOption?, InteractiveStatus)>(timeout ?? _config.DefaultTimeout,
-            false, (default, InteractiveStatus.Timeout), (default, InteractiveStatus.Canceled), cancellationToken);
+        var timeoutTaskSource = new TimeoutTaskCompletionSource<(IReadOnlyList<TOption>, InteractiveStatus)>(timeout ?? _config.DefaultTimeout,
+            false, (Array.Empty<TOption>(), InteractiveStatus.Timeout), (Array.Empty<TOption>(), InteractiveStatus.Canceled), cancellationToken);
 
         using var callback = new SelectionCallback<TOption>(selection, message, timeoutTaskSource, DateTimeOffset.UtcNow, interaction);
 
         return await WaitForSelectionResultAsync(callback).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Returns a value that indicates whether the <paramref name="interaction"/> targets a message that is managed by an active paginator or selection, either through a component interaction or a modal.
+    /// </summary>
+    /// <param name="interaction">The incoming interaction.</param>
+    /// <returns>Whether the interaction targets a message that is managed by an active paginator or selection.</returns>
+    public bool IsManaged(IDiscordInteraction interaction)
+    {
+        InteractiveGuards.NotNull(interaction);
+
+        return (interaction is SocketMessageComponent componentInteraction
+            && IsManaged(componentInteraction.Message))
+            || (interaction is SocketModal modal
+            && ulong.TryParse(modal.Data.CustomId, out ulong messageId)
+            && _callbacks.ContainsKey(messageId));
+    }
+
+    /// <summary>
+    /// Returns a value that indicates whether the <paramref name="message"/> is managed by an active paginator or selection.
+    /// </summary>
+    /// <param name="message">The message.</param>
+    /// <returns>Whether the message is managed by an active paginator or selection.</returns>
+    public bool IsManaged(IUserMessage message)
+    {
+        InteractiveGuards.NotNull(message);
+        return IsManaged(message.Id);
+    }
+
+    /// <summary>
+    /// Returns a value that indicates whether the specified ID belongs to a message that is managed by an active paginator or selection.
+    /// </summary>
+    /// <param name="messageId">The message ID.</param>
+    /// <returns>Whether the message is managed by an active paginator or selection.</returns>
+    public bool IsManaged(ulong messageId) => _callbacks.ContainsKey(messageId);
+
+    /// <summary>
+    /// Attempts to get a paginator from the message it is currently managing.
+    /// </summary>
+    /// <param name="message">The message.</param>
+    /// <param name="paginator">The paginator, if found.</param>
+    /// <returns><see langword="true"/> if the paginator was found, otherwise <see langword="false"/>.</returns>
+    public bool TryGetPaginator(IUserMessage message, [MaybeNullWhen(false)] out Paginator paginator)
+    {
+        InteractiveGuards.NotNull(message);
+        return TryGetPaginator(message.Id, out paginator);
+    }
+
+    /// <summary>
+    /// Attempts to get a paginator from the ID of the message it is currently managing.
+    /// </summary>
+    /// <param name="messageId">The ID of the message.</param>
+    /// <param name="paginator">The paginator, if found.</param>
+    /// <returns><see langword="true"/> if the paginator was found, otherwise <see langword="false"/>.</returns>
+    public bool TryGetPaginator(ulong messageId, [MaybeNullWhen(false)] out Paginator paginator)
+    {
+        paginator = null;
+        if (!_callbacks.TryGetValue(messageId, out var callback) || callback is not PaginatorCallback paginatorCallback)
+            return false;
+
+        paginator = paginatorCallback.Paginator;
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to get a selection from the message it is currently managing.
+    /// </summary>
+    /// <typeparam name="TOption">The type of the options the selection contains.</typeparam>
+    /// <param name="message">The message.</param>
+    /// <param name="selection">The selection, if found.</param>
+    /// <returns><see langword="true"/> if the selection was found, otherwise <see langword="false"/>.</returns>
+    public bool TryGetSelection<TOption>(IUserMessage message, [MaybeNullWhen(false)] out BaseSelection<TOption> selection)
+    {
+        InteractiveGuards.NotNull(message);
+        return TryGetSelection(message.Id, out selection);
+    }
+
+    /// <summary>
+    /// Attempts to get a selection from the ID of the message it is currently managing.
+    /// </summary>
+    /// <typeparam name="TOption">The type of the options the selection contains.</typeparam>
+    /// <param name="messageId">The ID of the message.</param>
+    /// <param name="selection">The selection, if found.</param>
+    /// <returns><see langword="true"/> if the selection was found, otherwise <see langword="false"/>.</returns>
+    public bool TryGetSelection<TOption>(ulong messageId, [MaybeNullWhen(false)] out BaseSelection<TOption> selection)
+    {
+        selection = null;
+        if (!_callbacks.TryGetValue(messageId, out var callback) || callback is not SelectionCallback<TOption> selectionCallback)
+            return false;
+
+        selection = selectionCallback.Selection;
+        return true;
+    }
+
+    /// <summary>
+    /// Returns a value that indicates whether an incoming object (such as a message, reaction or interaction) triggers at least one of the filters registered by the Next{Entity}Async() methods.
+    /// </summary>
+    /// <typeparam name="T">The type of the incoming object.</typeparam>
+    /// <param name="obj">The incoming object.</param>
+    /// <returns>Whether the specified object triggers at least one of the filters.</returns>
+    public bool TriggersAnyFilter<T>(T obj) => _filteredCallbacks.Values.Any(x => x.TriggersFilter(obj));
 
     private async Task<InteractiveMessageResult> SendPaginatorInternalAsync(Paginator paginator, IMessageChannel? channel, TimeSpan? timeout = null,
         IUserMessage? message = null, Action<IUserMessage>? messageAction = null, bool resetTimeoutOnInput = false, CancellationToken cancellationToken = default)
@@ -657,7 +718,7 @@ public class InteractiveService
         InteractiveGuards.DeleteAndDisableInputNotSet(paginator.ActionOnTimeout);
         InteractiveGuards.DeleteAndDisableInputNotSet(paginator.ActionOnCancellation);
         InteractiveGuards.SupportedInputType(paginator, false);
-        InteractiveGuards.NotCanceled(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
         message = await SendOrModifyMessageAsync(paginator, message, channel).ConfigureAwait(false);
         messageAction?.Invoke(message);
@@ -690,7 +751,7 @@ public class InteractiveService
         }
     }
 
-    private async Task<InteractiveMessageResult<TOption?>> SendSelectionInternalAsync<TOption>(BaseSelection<TOption> selection, IMessageChannel? channel,
+    private async Task<InteractiveMessageResult<TOption>> SendSelectionInternalAsync<TOption>(BaseSelection<TOption> selection, IMessageChannel? channel,
         TimeSpan? timeout = null, IUserMessage? message = null, Action<IUserMessage>? messageAction = null, CancellationToken cancellationToken = default)
     {
         InteractiveGuards.NotNull(selection);
@@ -699,13 +760,13 @@ public class InteractiveService
         InteractiveGuards.DeleteAndDisableInputNotSet(selection.ActionOnCancellation);
         InteractiveGuards.DeleteAndDisableInputNotSet(selection.ActionOnSuccess);
         InteractiveGuards.SupportedInputType(selection, false);
-        InteractiveGuards.NotCanceled(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
         message = await SendOrModifyMessageAsync(selection, message, channel).ConfigureAwait(false);
         messageAction?.Invoke(message);
 
-        var timeoutTaskSource = new TimeoutTaskCompletionSource<(TOption?, InteractiveStatus)>(timeout ?? _config.DefaultTimeout,
-            false, (default, InteractiveStatus.Timeout), (default, InteractiveStatus.Canceled), cancellationToken);
+        var timeoutTaskSource = new TimeoutTaskCompletionSource<(IReadOnlyList<TOption>, InteractiveStatus)>(timeout ?? _config.DefaultTimeout,
+            false, (Array.Empty<TOption>(), InteractiveStatus.Timeout), (Array.Empty<TOption>(), InteractiveStatus.Canceled), cancellationToken);
 
         using var callback = new SelectionCallback<TOption>(selection, message, timeoutTaskSource, DateTimeOffset.UtcNow);
 
@@ -715,7 +776,7 @@ public class InteractiveService
     private async Task<InteractiveResult<T?>> NextEntityAsync<T>(Func<T, bool>? filter = null, Func<T, bool, Task>? action = null,
         TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
-        InteractiveGuards.NotCanceled(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
         filter ??= _ => true;
         action ??= (_, _) => Task.CompletedTask;
@@ -782,7 +843,7 @@ public class InteractiveService
         }
     }
 
-    private async Task<InteractiveMessageResult<TOption?>> WaitForSelectionResultAsync<TOption>(SelectionCallback<TOption> callback)
+    private async Task<InteractiveMessageResult<TOption>> WaitForSelectionResultAsync<TOption>(SelectionCallback<TOption> callback)
     {
         _callbacks[callback.Message.Id] = callback;
 
@@ -809,7 +870,7 @@ public class InteractiveService
         var (selected, status) = await callback.TimeoutTaskSource.Task.ConfigureAwait(false);
         cts?.Cancel();
 
-        var result = InteractiveMessageResultBuilder<TOption?>.FromCallback(callback, selected, status).Build();
+        var result = InteractiveMessageResultBuilder<TOption>.FromCallback(callback, selected, status).Build();
 
         if (_callbacks.TryRemove(callback.Message.Id, out _))
         {
@@ -846,7 +907,7 @@ public class InteractiveService
         else
         {
             InteractiveGuards.NotNull(channel);
-            message = await channel!.SendFilesAsync(attachments ?? Enumerable.Empty<FileAttachment>(), page.Text, page.IsTTS, null, null,
+            message = await channel.SendFilesAsync(attachments ?? [], page.Text, page.IsTTS, null, null,
                 page.AllowedMentions, page.MessageReference, component, page.Stickers.ToArray(), page.GetEmbedArray()).ConfigureAwait(false);
         }
 
@@ -871,12 +932,12 @@ public class InteractiveService
         switch (responseType)
         {
             case InteractionResponseType.ChannelMessageWithSource:
-                await interaction.RespondWithFilesAsync(attachments ?? Enumerable.Empty<FileAttachment>(),
+                await interaction.RespondWithFilesAsync(attachments ?? [],
                     page.Text, embeds, page.IsTTS, ephemeral, page.AllowedMentions, component).ConfigureAwait(false);
                 return await interaction.GetOriginalResponseAsync().ConfigureAwait(false);
 
             case InteractionResponseType.DeferredChannelMessageWithSource:
-                return await interaction.FollowupWithFilesAsync(attachments ?? Enumerable.Empty<FileAttachment>(),
+                return await interaction.FollowupWithFilesAsync(attachments ?? [],
                     page.Text, embeds, page.IsTTS, ephemeral, page.AllowedMentions, component).ConfigureAwait(false);
 
             case InteractionResponseType.DeferredUpdateMessage:
@@ -946,6 +1007,7 @@ public class InteractiveService
             {
                 // We want to delete the message so we don't care if the message has been already deleted.
             }
+
             return;
         }
 
@@ -1040,13 +1102,13 @@ public class InteractiveService
 
         foreach (var pair in _filteredCallbacks)
         {
-            if (pair.Value is FilteredCallback<SocketMessage> filteredCallback)
+            if (pair.Value.IsCompatible(message))
             {
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        await filteredCallback.ExecuteAsync(message).ConfigureAwait(false);
+                        await pair.Value.ExecuteAsync(message).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -1079,13 +1141,13 @@ public class InteractiveService
 
         foreach (var pair in _filteredCallbacks)
         {
-            if (pair.Value is FilteredCallback<SocketReaction> filteredCallback)
+            if (pair.Value.IsCompatible(reaction))
             {
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        await filteredCallback.ExecuteAsync(reaction).ConfigureAwait(false);
+                        await pair.Value.ExecuteAsync(reaction).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -1102,11 +1164,11 @@ public class InteractiveService
     {
         ulong messageId = 0;
 
-        if (interaction is IComponentInteraction componentInteraction
-            && _callbacks.TryGetValue(componentInteraction.Message.Id, out var callback)
-            || interaction is IModalInteraction modal
+        if ((interaction is IComponentInteraction componentInteraction
+            && _callbacks.TryGetValue(componentInteraction.Message.Id, out var callback))
+            || (interaction is IModalInteraction modal
             && ulong.TryParse(modal.Data.CustomId, out messageId)
-            && _callbacks.TryGetValue(messageId, out callback))
+            && _callbacks.TryGetValue(messageId, out callback)))
         {
             _ = Task.Run(async () =>
             {
@@ -1123,11 +1185,7 @@ public class InteractiveService
 
         foreach (var pair in _filteredCallbacks)
         {
-            // Ugly but works
-            if (pair.Value is FilteredCallback<SocketInteraction> or FilteredCallback<SocketMessageComponent>
-                or FilteredCallback<SocketSlashCommand> or FilteredCallback<SocketUserCommand>
-                or FilteredCallback<SocketMessageCommand> or FilteredCallback<SocketAutocompleteInteraction>
-                or FilteredCallback<SocketModal>)
+            if (pair.Value.IsCompatible(interaction))
             {
                 _ = Task.Run(async () =>
                 {
@@ -1147,10 +1205,10 @@ public class InteractiveService
     }
 
     private void LogError(string source, string message, Exception? exception = null)
-        => Log?.Invoke(new LogMessage(LogSeverity.Error, source, message, exception));
+        => Log(new LogMessage(LogSeverity.Error, source, message, exception));
 
-    private Task LogMessage(LogMessage message) =>
-        _config.LogLevel >= message.Severity
+    private Task LogMessage(LogMessage message)
+        => _config.LogLevel >= message.Severity
             ? Task.FromResult(message)
             : Task.CompletedTask;
 }

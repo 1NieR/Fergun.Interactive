@@ -11,7 +11,7 @@ using Fergun.Interactive.Extensions;
 namespace Fergun.Interactive.Selection;
 
 /// <summary>
-/// Represents the base of selections.
+/// Represents a selection of options.
 /// </summary>
 /// <typeparam name="TOption">The type of the options.</typeparam>
 public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
@@ -32,21 +32,31 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
         InteractiveGuards.NotEmpty(properties.Options);
         InteractiveGuards.NoDuplicates(properties.Options, properties.EqualityComparer);
 
+        if (properties.RestrictedInputBehavior == RestrictedInputBehavior.SendMessage)
+        {
+            InteractiveGuards.NotNull(properties.RestrictedPageFactory);
+        }
+
         StringConverter = properties.StringConverter;
         EmoteConverter = properties.EmoteConverter;
         EqualityComparer = properties.EqualityComparer;
         SelectionPage = properties.SelectionPage.Build();
-        AllowCancel = properties.AllowCancel && properties.Options.Count > 1;
+        AllowCancel = properties is { AllowCancel: true, Options.Count: > 1 };
         CancelOption = AllowCancel ? properties.Options.Last() : default;
+        MinValues = properties.MinValues;
+        MaxValues = properties.MaxValues;
+        Placeholder = properties.Placeholder;
         Users = properties.Users.ToArray();
         Options = properties.Options.ToArray();
         CanceledPage = properties.CanceledPage?.Build();
         TimeoutPage = properties.TimeoutPage?.Build();
+        RestrictedPage = properties.RestrictedPageFactory?.Invoke(Users);
         SuccessPage = properties.SuccessPage?.Build();
         Deletion = properties.Deletion;
         InputType = properties.InputType;
         ActionOnCancellation = properties.ActionOnCancellation;
         ActionOnTimeout = properties.ActionOnTimeout;
+        RestrictedInputBehavior = properties.RestrictedInputBehavior;
         ActionOnSuccess = properties.ActionOnSuccess;
 
         if (StringConverter is null && (!InputType.HasFlag(InputType.Buttons) || EmoteConverter is null))
@@ -92,6 +102,24 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
     /// </summary>
     public IPage SelectionPage { get; }
 
+    /// <summary>
+    /// Gets the minimum number of items a user must select.
+    /// </summary>
+    /// <remarks>Only applicable to selections using select menus.</remarks>
+    public int MinValues { get; }
+
+    /// <summary>
+    /// Gets the maximum number of items a user can select.
+    /// </summary>
+    /// <remarks>Only applicable to selections using select menus.</remarks>
+    public int MaxValues { get; }
+
+    /// <summary>
+    /// Gets the placeholder text of the selection.
+    /// </summary>
+    /// <remarks>Only applicable to selections using select menus.</remarks>
+    public string? Placeholder { get; }
+
     /// <inheritdoc/>
     public IReadOnlyCollection<IUser> Users { get; }
 
@@ -103,6 +131,11 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
 
     /// <inheritdoc/>
     public IPage? TimeoutPage { get; }
+
+    /// <summary>
+    /// Gets the <see cref="IPage"/> that will be displayed ephemerally to a user when they are not allowed to interact with this selection.
+    /// </summary>
+    public IPage? RestrictedPage { get; }
 
     /// <summary>
     /// Gets the <see cref="IPage"/> which this selection gets modified to after a valid input is received
@@ -121,6 +154,11 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
 
     /// <inheritdoc/>
     public ActionOnStop ActionOnTimeout { get; }
+
+    /// <summary>
+    /// Gets the behavior the selection should exhibit when a user is not allowed to interact with it.
+    /// </summary>
+    public RestrictedInputBehavior RestrictedInputBehavior { get; }
 
     /// <summary>
     /// Gets the action that will be done after valid input is received (except if <see cref="CancelOption"/> is received).
@@ -160,7 +198,12 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
             var selectMenu = new SelectMenuBuilder()
                 .WithCustomId("foobar")
                 .WithOptions(options)
-                .WithDisabled(disableAll);
+                .WithDisabled(disableAll)
+                .WithMinValues(MinValues)
+                .WithMaxValues(MaxValues);
+
+            if (!string.IsNullOrEmpty(Placeholder))
+                selectMenu.WithPlaceholder(Placeholder);
 
             builder.WithSelectMenu(selectMenu);
         }
@@ -206,17 +249,15 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
         bool manageMessages = await message.Channel.CurrentUserHasManageMessagesAsync().ConfigureAwait(false);
 
         TOption? selected = default;
-        string? selectedString = null;
         foreach (var value in Options)
         {
             string? temp = StringConverter?.Invoke(value);
             if (temp != input.Content) continue;
-            selectedString = temp;
             selected = value;
             break;
         }
 
-        if (selectedString is null)
+        if (selected is null)
         {
             if (manageMessages && Deletion.HasFlag(DeletionOptions.Invalid))
             {
@@ -226,11 +267,11 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
             return InteractiveInputStatus.Ignored;
         }
 
-        bool isCanceled = AllowCancel && StringConverter?.Invoke(CancelOption) == selectedString;
+        bool isCanceled = AllowCancel && EqualityComparer.Equals(selected, CancelOption);
 
         if (isCanceled)
         {
-            return new InteractiveInputResult<TOption>(InteractiveInputStatus.Canceled, selected!);
+            return new InteractiveInputResult<TOption>(InteractiveInputStatus.Canceled, selected);
         }
 
         if (manageMessages && Deletion.HasFlag(DeletionOptions.Valid))
@@ -238,7 +279,7 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
             await input.DeleteAsync().ConfigureAwait(false);
         }
 
-        return new InteractiveInputResult<TOption>(InteractiveInputStatus.Success, selected!);
+        return new InteractiveInputResult<TOption>(InteractiveInputStatus.Success, selected);
     }
 
     /// <inheritdoc cref="IInteractiveInputHandler.HandleReactionAsync"/>
@@ -255,17 +296,15 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
         bool manageMessages = await message.Channel.CurrentUserHasManageMessagesAsync().ConfigureAwait(false);
 
         TOption? selected = default;
-        IEmote? selectedEmote = null;
         foreach (var value in Options)
         {
             var temp = EmoteConverter?.Invoke(value);
             if (temp?.Name != input.Emote.Name) continue;
-            selectedEmote = temp;
             selected = value;
             break;
         }
 
-        if (selectedEmote is null)
+        if (selected is null)
         {
             if (manageMessages && Deletion.HasFlag(DeletionOptions.Invalid))
             {
@@ -275,7 +314,7 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
             return InteractiveInputStatus.Ignored;
         }
 
-        bool isCanceled = AllowCancel && EmoteConverter?.Invoke(CancelOption).Name == selectedEmote.Name;
+        bool isCanceled = AllowCancel && EqualityComparer.Equals(selected, CancelOption);
 
         if (isCanceled)
         {
@@ -291,61 +330,61 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
     }
 
     /// <inheritdoc cref="IInteractiveInputHandler.HandleInteractionAsync"/>
-    public virtual Task<InteractiveInputResult<TOption>> HandleInteractionAsync(IComponentInteraction input, IUserMessage message)
+    public virtual async Task<InteractiveInputResult<TOption>> HandleInteractionAsync(IComponentInteraction input, IUserMessage message)
     {
         InteractiveGuards.NotNull(input);
         InteractiveGuards.NotNull(message);
 
         if (!InputType.HasFlag(InputType.Buttons) && !InputType.HasFlag(InputType.SelectMenus))
         {
-            return Task.FromResult<InteractiveInputResult<TOption>>(InteractiveInputStatus.Ignored);
+            return InteractiveInputStatus.Ignored;
         }
 
-        if (input.Message.Id != message.Id || !this.CanInteract(input.User))
+        if (input.Message.Id != message.Id)
         {
-            return Task.FromResult<InteractiveInputResult<TOption>>(InteractiveInputStatus.Ignored);
+            return InteractiveInputStatus.Ignored;
         }
 
-        TOption? selected = default;
-        string? selectedString = null;
-        string? customId = input.Data.Type switch
+        if (!this.CanInteract(input.User))
         {
-            ComponentType.Button => input.Data.CustomId,
-            ComponentType.SelectMenu => (input
-                    .Message
-                    .Components
-                    .OfType<ActionRowComponent>()
-                    .FirstOrDefault(x => x.Components.Any(y => y.Type == ComponentType.SelectMenu && y.CustomId == input.Data.CustomId))?
-                    .Components
-                    .FirstOrDefault() as SelectMenuComponent)?
-                .Options
-                .FirstOrDefault(x => x.Value == input.Data.Values.FirstOrDefault())?
-                .Value,
-            _ => null
+            return RestrictedInputBehavior switch
+            {
+                RestrictedInputBehavior.Ignore or RestrictedInputBehavior.Auto when RestrictedPage is null => InteractiveInputStatus.Ignored,
+                RestrictedInputBehavior.SendMessage or RestrictedInputBehavior.Auto when RestrictedPage is not null => await SendRestrictedMessageAsync(input).ConfigureAwait(false),
+                RestrictedInputBehavior.Defer => await DeferInteractionAsync(input).ConfigureAwait(false),
+                _ => InteractiveInputStatus.Ignored
+            };
+        }
+
+        var selectedValues = input.Data.Type switch
+        {
+            ComponentType.Button => [input.Data.CustomId],
+            ComponentType.SelectMenu => input.Data.Values,
+            _ => []
         };
 
-        if (customId is null)
+        if (selectedValues.Count == 0)
         {
-            return Task.FromResult<InteractiveInputResult<TOption>>(InteractiveInputStatus.Ignored);
+            return InteractiveInputStatus.Ignored;
         }
 
-        foreach (var value in Options)
+        List<TOption> options = [];
+        foreach (string value in selectedValues)
         {
-            string? stringValue = EmoteConverter?.Invoke(value)?.ToString() ?? StringConverter?.Invoke(value);
-            if (customId != stringValue) continue;
-            selected = value;
-            selectedString = stringValue;
-            break;
+            var option = Options.FirstOrDefault(option => (EmoteConverter?.Invoke(option)?.ToString() ?? StringConverter?.Invoke(option)) == value);
+            if (option is not null && !EqualityComparer.Equals(option, default!))
+            {
+                options.Add(option);
+            }
         }
 
-        if (selectedString is null)
+        if (options.Count == 0)
         {
-            return Task.FromResult<InteractiveInputResult<TOption>>(InteractiveInputStatus.Ignored);
+            return InteractiveInputStatus.Ignored;
         }
 
-        bool isCanceled = AllowCancel && (EmoteConverter?.Invoke(CancelOption)?.ToString() ?? StringConverter?.Invoke(CancelOption)) == selectedString;
-
-        return Task.FromResult(new InteractiveInputResult<TOption>(isCanceled ? InteractiveInputStatus.Canceled : InteractiveInputStatus.Success, selected));
+        var status = AllowCancel && options.Contains(CancelOption, EqualityComparer) ? InteractiveInputStatus.Canceled : InteractiveInputStatus.Success;
+        return new InteractiveInputResult<TOption>(status, options.AsReadOnly());
     }
 
     /// <inheritdoc/>
@@ -396,5 +435,20 @@ public abstract class BaseSelection<TOption> : IInteractiveElement<TOption>
                 await message.AddReactionAsync(emote).ConfigureAwait(false);
             }
         }
+    }
+
+    private async Task<InteractiveInputResult<TOption>> SendRestrictedMessageAsync(IComponentInteraction input)
+    {
+        var page = RestrictedPage ?? throw new InvalidOperationException($"Expected {nameof(RestrictedPage)} to be non-null.");
+        var attachments = page.AttachmentsFactory is null ? null : await page.AttachmentsFactory().ConfigureAwait(false);
+        await input.RespondWithFilesAsync(attachments ?? [], page.Text, page.GetEmbedArray(), page.IsTTS, true, page.AllowedMentions).ConfigureAwait(false);
+
+        return InteractiveInputStatus.Ignored;
+    }
+
+    private static async Task<InteractiveInputResult<TOption>> DeferInteractionAsync(IComponentInteraction input)
+    {
+        await input.DeferAsync().ConfigureAwait(false);
+        return InteractiveInputStatus.Ignored;
     }
 }

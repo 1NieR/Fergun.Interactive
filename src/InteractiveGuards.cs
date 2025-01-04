@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using Discord;
 using Discord.WebSocket;
 
@@ -10,7 +10,7 @@ namespace Fergun.Interactive;
 
 internal static class InteractiveGuards
 {
-    public static void NotNull<T>(T? obj, [CallerArgumentExpression(nameof(obj))] string? parameterName = null) where T : class
+    public static void NotNull<T>([NotNull] T? obj, [CallerArgumentExpression(nameof(obj))] string? parameterName = null) where T : class
     {
         if (obj is null)
         {
@@ -26,11 +26,11 @@ internal static class InteractiveGuards
         }
     }
 
-    public static void NotCanceled(CancellationToken cancellationToken, [CallerArgumentExpression(nameof(cancellationToken))] string? parameterName = null)
+    public static void NotEmpty<T>(IReadOnlyCollection<T> collection, [CallerArgumentExpression(nameof(collection))] string? parameterName = null)
     {
-        if (cancellationToken.IsCancellationRequested)
+        if (collection.Count == 0)
         {
-            throw new ArgumentException("Cancellation token must not be canceled.", parameterName);
+            throw new ArgumentException("Collection must not be empty.", parameterName);
         }
     }
 
@@ -51,6 +51,34 @@ internal static class InteractiveGuards
         }
     }
 
+    public static void ValueInRange(int min, int max, int value, [CallerArgumentExpression(nameof(value))] string? parameterName = null)
+    {
+        if (value < min)
+        {
+            throw new ArgumentOutOfRangeException(parameterName, value, $"Value must be greater than or equal to {min}.");
+        }
+
+        if (value > max)
+        {
+            throw new ArgumentOutOfRangeException(parameterName, value, $"Value must be lower than or equal to {max}.");
+        }
+    }
+
+    public static void StringLengthInRange(int min, int max, string str, [CallerArgumentExpression(nameof(str))] string? parameterName = null)
+    {
+        NotNull(str);
+
+        if (str.Length < min)
+        {
+            throw new ArgumentOutOfRangeException(parameterName, str.Length, $"String length must be greater than or equal to {min}.");
+        }
+
+        if (str.Length > max)
+        {
+            throw new ArgumentOutOfRangeException(parameterName, str.Length, $"String length must be lower than or equal to {max}.");
+        }
+    }
+
     public static void ExpectedType<TInput, TExpected>(TInput obj, out TExpected expected, [CallerArgumentExpression(nameof(obj))] string? parameterName = null)
     {
         if (obj is not TExpected temp)
@@ -63,7 +91,7 @@ internal static class InteractiveGuards
 
     public static void EmbedCountInRange(ICollection<EmbedBuilder> builders, bool ensureMaxCapacity = false, [CallerArgumentExpression(nameof(builders))] string? parameterName = null)
     {
-        if (builders.Count > 10 || ensureMaxCapacity && builders.Count + 1 > 10)
+        if (builders.Count > 10 || (ensureMaxCapacity && builders.Count + 1 > 10))
         {
             throw new ArgumentException("A page cannot have more than 10 embeds.", parameterName);
         }

@@ -5,8 +5,6 @@ VisualStudioVersion = 17.0.31521.260
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Fergun.Interactive", "src\Fergun.Interactive.csproj", "{DF665E3D-B5E5-42C4-A037-AD2E865F7408}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ExampleBot", "ExampleBot\ExampleBot.csproj", "{8DC5AD83-2DD6-495A-A160-C39BC7CE76A0}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -17,10 +15,6 @@ Global
 		{DF665E3D-B5E5-42C4-A037-AD2E865F7408}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DF665E3D-B5E5-42C4-A037-AD2E865F7408}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DF665E3D-B5E5-42C4-A037-AD2E865F7408}.Release|Any CPU.Build.0 = Release|Any CPU
-		{8DC5AD83-2DD6-495A-A160-C39BC7CE76A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8DC5AD83-2DD6-495A-A160-C39BC7CE76A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{8DC5AD83-2DD6-495A-A160-C39BC7CE76A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{8DC5AD83-2DD6-495A-A160-C39BC7CE76A0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

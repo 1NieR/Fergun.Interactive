@@ -41,16 +41,23 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
             InteractiveGuards.NotEmpty(properties.Options);
         }
 
+        if (properties.RestrictedInputBehavior == RestrictedInputBehavior.SendMessage)
+        {
+            InteractiveGuards.NotNull(properties.RestrictedPageFactory);
+        }
+
         Users = properties.Users.ToArray();
         Emotes = properties.Options.AsReadOnly();
         ButtonFactories = new ReadOnlyCollection<Func<IButtonContext, IPaginatorButton>>(properties.ButtonFactories);
         SelectMenuFactories = new ReadOnlyCollection<Func<ISelectMenuContext, IPaginatorSelectMenu>>(properties.SelectMenuFactories);
         CanceledPage = properties.CanceledPage?.Build();
         TimeoutPage = properties.TimeoutPage?.Build();
+        RestrictedPage = properties.RestrictedPageFactory?.Invoke(Users);
         Deletion = properties.Deletion;
         InputType = properties.InputType;
         ActionOnCancellation = properties.ActionOnCancellation;
         ActionOnTimeout = properties.ActionOnTimeout;
+        RestrictedInputBehavior = properties.RestrictedInputBehavior;
         CurrentPageIndex = properties.StartPageIndex;
         JumpInputTimeout = properties.JumpInputTimeout;
         JumpInputPrompt = properties.JumpInputPrompt ?? "Enter a page number";
@@ -86,12 +93,12 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// <summary>
     /// Gets the emotes and their related actions of this paginator.
     /// </summary>
+    /// <remarks>This property has been replaced by <see cref="ButtonFactories"/> and it shouldn't be used on button-based paginators.</remarks>
     public IReadOnlyDictionary<IEmote, PaginatorAction> Emotes { get; }
 
     /// <summary>
     /// Gets the button factories.
     /// </summary>
-    /// <remarks>This property is only used when <see cref="InputType"/> contains <see cref="InputType.Buttons"/>.</remarks>
     public IReadOnlyList<Func<IButtonContext, IPaginatorButton>> ButtonFactories { get; }
 
     /// <summary>
@@ -107,9 +114,14 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     public IPage? TimeoutPage { get; }
 
     /// <summary>
+    /// Gets the <see cref="IPage"/> that will be displayed ephemerally to a user when they are not allowed to interact with this paginator.
+    /// </summary>
+    public IPage? RestrictedPage { get; }
+
+    /// <summary>
     /// Gets what type of inputs this paginator should delete.
     /// </summary>
-    /// <remarks>This property is ignored in button-based paginators.</remarks>
+    /// <remarks>This property is ignored on button-based paginators.</remarks>
     public DeletionOptions Deletion { get; }
 
     /// <summary>
@@ -126,6 +138,11 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// Gets the action that will be done after a timeout.
     /// </summary>
     public ActionOnStop ActionOnTimeout { get; }
+
+    /// <summary>
+    /// Gets the behavior the paginator should exhibit when a user is not allowed to interact with it.
+    /// </summary>
+    public RestrictedInputBehavior RestrictedInputBehavior { get; }
 
     /// <summary>
     /// Gets the maximum time to wait for a "jump to page" input.
@@ -224,8 +241,8 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// </summary>
     /// <param name="action">The paginator action.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains whether the action succeeded.</returns>
-    public virtual ValueTask<bool> ApplyActionAsync(PaginatorAction action) =>
-        action switch
+    public virtual ValueTask<bool> ApplyActionAsync(PaginatorAction action)
+        => action switch
         {
             PaginatorAction.Backward => SetPageAsync(CurrentPageIndex - 1),
             PaginatorAction.Forward => SetPageAsync(CurrentPageIndex + 1),
@@ -430,12 +447,11 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
             if (properties is null || properties.IsHidden)
                 continue;
 
-            var selectMenu = new SelectMenuBuilder(properties.CustomId, properties.Options, properties.Placeholder, properties.MinValues,
-                properties.MaxValues, properties.IsDisabled ?? context.ShouldDisable(), properties.Type, properties.ChannelTypes, properties.DefaultValues);
+            var selectMenu = new SelectMenuBuilder(properties.CustomId, properties.Options, properties.Placeholder, properties.MaxValues,
+                properties.MinValues, properties.IsDisabled ?? context.ShouldDisable(), properties.Type, properties.ChannelTypes, properties.DefaultValues);
 
             builder.WithSelectMenu(selectMenu);
         }
-
 
         return builder;
     }
@@ -516,12 +532,23 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
 
         if (!InputType.HasFlag(InputType.Buttons))
         {
-            return new InteractiveInputResult(InteractiveInputStatus.Ignored);
+            return InteractiveInputStatus.Ignored;
         }
 
-        if (input.Message.Id != message.Id || !this.CanInteract(input.User))
+        if (input.Message.Id != message.Id)
         {
-            return new InteractiveInputResult(InteractiveInputStatus.Ignored);
+            return InteractiveInputStatus.Ignored;
+        }
+
+        if (!this.CanInteract(input.User))
+        {
+            return RestrictedInputBehavior switch
+            {
+                RestrictedInputBehavior.Ignore or RestrictedInputBehavior.Auto when RestrictedPage is null => InteractiveInputStatus.Ignored,
+                RestrictedInputBehavior.SendMessage or RestrictedInputBehavior.Auto when RestrictedPage is not null => await SendRestrictedMessageAsync(input).ConfigureAwait(false),
+                RestrictedInputBehavior.Defer => await DeferInteractionAsync(input).ConfigureAwait(false),
+                _ => InteractiveInputStatus.Ignored
+            };
         }
 
         // Get last character of custom ID, convert it to a number and cast it to PaginatorAction
@@ -611,8 +638,8 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
     /// <inheritdoc />
     async Task<IInteractiveResult<InteractiveInputStatus>> IInteractiveInputHandler.HandleInteractionAsync(IComponentInteraction input, IUserMessage message)
     {
-        InteractiveGuards.ExpectedType<IComponentInteraction, IComponentInteraction>(input, out var componentInteraction);
-        return await HandleInteractionAsync(componentInteraction, message).ConfigureAwait(false);
+        InteractiveGuards.ExpectedType<IComponentInteraction, SocketMessageComponent>(input, out var socketMessageComponent);
+        return await HandleInteractionAsync(socketMessageComponent, message).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -660,5 +687,20 @@ public abstract class Paginator : IInteractiveElement<KeyValuePair<IEmote, Pagin
             CurrentPageIndex = previousPageIndex;
             throw; // InteractiveService will handle and log the exception
         }
+    }
+
+    private async Task<InteractiveInputResult> SendRestrictedMessageAsync(IComponentInteraction input)
+    {
+        var page = RestrictedPage ?? throw new InvalidOperationException($"Expected {nameof(RestrictedPage)} to be non-null.");
+        var attachments = page.AttachmentsFactory is null ? null : await page.AttachmentsFactory().ConfigureAwait(false);
+        await input.RespondWithFilesAsync(attachments ?? [], page.Text, page.GetEmbedArray(), page.IsTTS, true, page.AllowedMentions).ConfigureAwait(false);
+
+        return InteractiveInputStatus.Success;
+    }
+
+    private static async Task<InteractiveInputResult> DeferInteractionAsync(IComponentInteraction input)
+    {
+        await input.DeferAsync().ConfigureAwait(false);
+        return InteractiveInputStatus.Success;
     }
 }

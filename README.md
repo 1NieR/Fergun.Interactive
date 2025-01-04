@@ -1,35 +1,36 @@
 # Fergun.Interactive
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![NuGet](https://img.shields.io/nuget/vpre/Fergun.Interactive)](https://www.nuget.org/packages/Fergun.Interactive) [![Discord](https://discord.com/api/guilds/460627183501574144/widget.png)](https://discord.gg/V3TgaZRUPX)
 
-Fergun.Interactive is an addon that adds interactive functionality to commands.
+**Fergun.Interactive** is an addon that provides interactive functionality to Discord commands.
 
 This is a fork of [Discord.InteractivityAddon](https://github.com/Playwo/Discord.InteractivityAddon) that adds several features, including more customization and support for interactions (buttons and select menus).
 
 ## Features
 
 - Methods for sending and deleting a message after a timeout
-- Methods for receiving incoming messages/reactions/interactions
-- Fully customizable paginator
-  - Uses pages that can be changed through reactions or buttons
-  - Support for customization of buttons (emote, label, style, etc.)
-  - 2 included types of paginators: static and lazy loaded
-  - Support for restricting use to certain users
-  - Supports a canceled and timeout page
-  - Support for timeout and cancellation via a special option/choice or a cancellation token
-  - Support for actions that are executed when a paginator stops like modify/delete the message and/or remove/disable the reactions/components
-  - Support for extension methods that can be used in any paginator builder
-  - Support for custom paginators, inheriting from the `Paginator` and `PaginatorBuilder` classes
-  - Jump (skip) to a specific page using a message input or modals (more info [here](https://github.com/d4n3436/Fergun.Interactive/releases/tag/v1.5))
-- Fully customizable selection
-  - Uses a list of options to select from
-  - Supports messages, reactions, buttons and select menus
-  - Support for restricting use to certain users
-  - Supports a success, canceled and timeout page
-  - Support for timeout and cancellation via a special option/choice or a cancellation token
-  - Support for actions that are executed when a selection stops like modify/delete the message and/or remove/disable the reactions/components
-  - Support for extension methods that can be used in any selection builder
-  - Fully generic, supports any type of option (providing a string/emote converter for that type)
-  - Support for custom selections, inheriting from the `BaseSelection` and `BaseSelectionBuilder` classes
+- Methods for receiving incoming messages, reactions, or interactions
+- Fully customizable paginator:
+  - Uses pages that can be navigated through reactions or buttons
+  - Supports button customization (emote, label, style, etc.)
+  - Includes two types of paginators: static and lazy-loaded
+  - Supports restricting usage to specific users
+  - Provides canceled and timeout pages
+  - Supports timeout and cancellation via a special option or cancellation token
+  - Supports actions that are executed when a paginator stops, such as modifying/deleting the message or removing/disabling the reactions/components
+  - Supports extension methods that can be used in any paginator builder
+  - Supports custom paginators, inheriting from the `Paginator` and `PaginatorBuilder` classes
+  - Allows jumping (skipping) to a specific page using message input or modals (more info [here](https://github.com/d4n3436/Fergun.Interactive/releases/tag/v1.5))
+
+- Fully customizable selection:
+  - Uses a list of options for users to select from
+  - Supports messages, reactions, buttons, and select menus
+  - Supports restricting usage to specific users
+  - Provides success, canceled, and timeout pages
+  - Supports timeout and cancellation via a special option or cancellation token
+  - Supports actions that are executed when a selection stops, such as modifying/deleting the message or removing/disabling the reactions/components
+  - Supports extension methods that can be used in any selection builder
+  - Fully generic, supports any type of option (by providing a string/emote converter for that type)
+  - Supports custom selections, inheriting from the `BaseSelection` and `BaseSelectionBuilder` classes
 
 ## Usage
 - Install via [NuGet](https://www.nuget.org/packages/Fergun.Interactive)
@@ -58,15 +59,16 @@ Example modules:
 
 - Selection
   - [Simple selection](ExampleBot/Modules/SelectionModule.cs#L28) (`!select simple`)
-  - [Emote selection](ExampleBot/Modules/SelectionModule.cs#L68) (`!select emote`) (for selections using reactions/buttons as input)
-  - [Emote selection 2](ExampleBot/Modules/SelectionModule.cs#L102) (`!select emote2`)
-  - [Selection with extra features](ExampleBot/Modules/SelectionModule.cs#L139) (`!select extra`)
-  - [Menu](ExampleBot/Modules/SelectionModule.cs#L193) (`!select menu`) (How to reuse a selection message)
+  - [Emote selection](ExampleBot/Modules/SelectionModule.cs#L66) (`!select emote`) (for selections using reactions/buttons as input)
+  - [Emote selection 2](ExampleBot/Modules/SelectionModule.cs#L101) (`!select emote2`)
+  - [Selection that allows choosing multiple options](ExampleBot/Modules/SelectionModule.cs#L137) (`!select multi`)
+  - [Selection with extra features](ExampleBot/Modules/SelectionModule.cs#L184) (`!select extra`)
+  - [Menu](ExampleBot/Modules/SelectionModule.cs#L233) (`!select menu`) (How to reuse a selection message)
 
 - Pagination
-  - [Static paginator](ExampleBot/Modules/PaginatorModule.cs#L26) (`!paginator static`)
-  - [Lazy paginator](ExampleBot/Modules/PaginatorModule.cs#L60) (`!paginator lazy`)
-  - [Image paginator](ExampleBot/Modules/PaginatorModule.cs#L80) (`!paginator img [query]`)
+  - [Static paginator](ExampleBot/Modules/PaginatorModule.cs#L27) (`!paginator static`)
+  - [Lazy paginator](ExampleBot/Modules/PaginatorModule.cs#L68) (`!paginator lazy`)
+  - [Image paginator](ExampleBot/Modules/PaginatorModule.cs#L87) (`!paginator img [query]`)
 
 - Customization
   - [Selection with custom button colors](ExampleBot/Modules/CustomButtonModule.cs#L16) (`!custom button`)
